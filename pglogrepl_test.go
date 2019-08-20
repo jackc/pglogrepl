@@ -52,3 +52,21 @@ func TestCreateReplicationSlot(t *testing.T) {
 	assert.Equal(t, slotName, result.SlotName)
 	assert.Equal(t, outputPlugin, result.OutputPlugin)
 }
+
+func TestDropReplicationSlot(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	require.NoError(t, err)
+
+	err = pglogrepl.DropReplicationSlot(ctx, conn, slotName, pglogrepl.DropReplicationSlotOptions{})
+	require.NoError(t, err)
+
+	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	require.NoError(t, err)
+}

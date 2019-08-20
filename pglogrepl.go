@@ -111,3 +111,18 @@ func ParseCreateReplicationSlot(mrr *pgconn.MultiResultReader) (CreateReplicatio
 
 	return crsr, nil
 }
+
+type DropReplicationSlotOptions struct {
+	Wait bool
+}
+
+// DropReplicationSlot drops a logical replication slot.
+func DropReplicationSlot(ctx context.Context, conn *pgconn.PgConn, slotName string, options DropReplicationSlotOptions) error {
+	var waitString string
+	if options.Wait {
+		waitString = "WAIT"
+	}
+	sql := fmt.Sprintf("DROP_REPLICATION_SLOT %s %s", slotName, waitString)
+	_, err := conn.Exec(ctx, sql).ReadAll()
+	return err
+}
