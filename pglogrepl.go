@@ -9,10 +9,35 @@ import (
 	errors "golang.org/x/xerrors"
 )
 
+// LSN is a PostgreSQL Log Sequence Number. See https://www.postgresql.org/docs/current/datatype-pg-lsn.html.
+type LSN uint64
+
+// String formats the LSN value into the XXX/XXX format which is the text format used by PostgreSQL.
+func (lsn LSN) String() string {
+	return fmt.Sprintf("%X/%X", uint32(lsn>>32), uint32(lsn))
+}
+
+// Parse the given XXX/XXX text format LSN used by PostgreSQL.
+func ParseLSN(s string) (LSN, error) {
+	var upperHalf uint64
+	var lowerHalf uint64
+	var nparsed int
+	nparsed, err := fmt.Sscanf(s, "%X/%X", &upperHalf, &lowerHalf)
+	if err != nil {
+		return 0, errors.Errorf("failed to parse LSN: %w", err)
+	}
+
+	if nparsed != 2 {
+		return 0, errors.Errorf("failed to parsed LSN: %s", s)
+	}
+
+	return LSN((upperHalf << 32) + lowerHalf), nil
+}
+
 type IdentifySystemResult struct {
 	SystemID string
 	Timeline int32
-	XlogPos  string
+	XlogPos  LSN
 	DBName   string
 }
 
@@ -48,7 +73,12 @@ func ParseIdentifySystem(mrr *pgconn.MultiResultReader) (IdentifySystemResult, e
 		return isr, errors.Errorf("failed to parse timeline: %w", err)
 	}
 	isr.Timeline = int32(timeline)
-	isr.XlogPos = string(row[2])
+
+	isr.XlogPos, err = ParseLSN(string(row[2]))
+	if err != nil {
+		return isr, errors.Errorf("failed to parse xlogpos as LSN: %w", err)
+	}
+
 	isr.DBName = string(row[3])
 
 	return isr, nil

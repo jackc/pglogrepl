@@ -33,8 +33,8 @@ func TestIdentifySystem(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Greater(t, len(sysident.SystemID), 0)
-	assert.Greater(t, sysident.Timeline, int32(0))
-	assert.Greater(t, len(sysident.XlogPos), 0)
+	assert.True(t, sysident.Timeline > 0)
+	assert.True(t, sysident.XlogPos > 0)
 	assert.Greater(t, len(sysident.DBName), 0)
 }
 
