@@ -74,7 +74,10 @@ func CreateReplicationSlot(
 	outputPlugin string,
 	options CreateReplicationSlotOptions,
 ) (CreateReplicationSlotResult, error) {
-	temporaryString := "TEMPORARY"
+	var temporaryString string
+	if options.Temporary {
+		temporaryString = "TEMPORARY"
+	}
 	sql := fmt.Sprintf("CREATE_REPLICATION_SLOT %s %s LOGICAL %s %s", slotName, temporaryString, outputPlugin, options.SnapshotAction)
 	return ParseCreateReplicationSlot(conn.Exec(ctx, sql))
 }
