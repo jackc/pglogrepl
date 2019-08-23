@@ -2,7 +2,7 @@ language: go
 
 go:
   - 1.x
-  - tip
+  # - tip
 
 git:
   depth: 1
@@ -16,11 +16,11 @@ env:
     - GO111MODULE=on
     - GOPROXY=https://proxy.golang.org
     - GOFLAGS=-mod=readonly
-    - PGLOGREPL_TEST_CONN_STRING=postgres://pglogrepl:secret@127.0.0.1/pglogrepl?replication=database&sslmode=disable
+    - PGLOGREPL_TEST_CONN_STRING="postgres://pglogrepl:secret@127.0.0.1/pglogrepl?replication=database"
   matrix:
     - PGVERSION=11
-    - PGVERSION=10
-    - PGVERSION=9.6
+    # - PGVERSION=10
+    # - PGVERSION=9.6
 
 cache:
   directories:
