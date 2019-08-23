@@ -1,5 +1,9 @@
 // pglogrepl package implements PostgreSQL logical replication client functionality.
 //
+// pglogrepl uses package github.com/jackc/pgconn as its underlying PostgreSQL connection.
+// Use pgconn to establish a connection to PostgreSQL and then use the pglogrepl functions
+// on that connection.
+//
 // Proper use of this package requires understanding the underlying PostgreSQL concepts.
 // See https://www.postgresql.org/docs/current/protocol-replication.html.
 package pglogrepl

@@ -2,6 +2,8 @@
 
 pglogrepl is a Go package for PostgreSQL logical replication.
 
+pglogrepl uses package github.com/jackc/pgconn as its underlying PostgreSQL connection.
+
 Proper use of this package requires understanding the underlying PostgreSQL concepts. See
 https://www.postgresql.org/docs/current/protocol-replication.html.
 
