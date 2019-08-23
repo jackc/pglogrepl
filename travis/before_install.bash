@@ -11,7 +11,7 @@ then
   sudo apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::="--force-confnew" install postgresql-$PGVERSION postgresql-server-dev-$PGVERSION postgresql-contrib-$PGVERSION
   sudo chmod 777 /etc/postgresql/$PGVERSION/main/pg_hba.conf
   echo "local     all         postgres                    trust"    >  /etc/postgresql/$PGVERSION/main/pg_hba.conf
-  echo "host      replication pglogrepl 127.0.0.1/32      md5"      >> /etc/postgresql/$PGVERSION/main/pg_hba.conf
+  echo "hostssl   replication pglogrepl 127.0.0.1/32      md5"      >> /etc/postgresql/$PGVERSION/main/pg_hba.conf
   sudo chmod 777 /etc/postgresql/$PGVERSION/main/postgresql.conf
   echo "wal_level='logical'"     >> /etc/postgresql/$PGVERSION/main/postgresql.conf
   echo "max_wal_senders=5"       >> /etc/postgresql/$PGVERSION/main/postgresql.conf
