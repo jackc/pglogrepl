@@ -16,7 +16,7 @@ env:
     - GO111MODULE=on
     - GOPROXY=https://proxy.golang.org
     - GOFLAGS=-mod=readonly
-    - PGLOGREPL_TEST_CONN_STRING=postgres://pglogrepl:secret@127.0.0.1/pglogrepl?replication=database
+    - PGLOGREPL_TEST_CONN_STRING=postgres://pglogrepl:secret@127.0.0.1/pglogrepl?replication=database&sslmode=disable
   matrix:
     - PGVERSION=11
     - PGVERSION=10
