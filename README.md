@@ -2,6 +2,10 @@
 
 pglogrepl is a Go package for PostgreSQL logical replication.
 
+## Example
+
+In `example/pglogrepl_demo`, there is an example demo program that connects to a database and logs all messages sent over logical replication.
+
 ## Testing
 
 Testing requires a user with replication permission, a database to replicate, access allowed in `pg_hba.conf`, and

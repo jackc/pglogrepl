@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestIdentifySystem(t *testing.T) {
 
 	assert.Greater(t, len(sysident.SystemID), 0)
 	assert.True(t, sysident.Timeline > 0)
-	assert.True(t, sysident.XlogPos > 0)
+	assert.True(t, sysident.XLogPos > 0)
 	assert.Greater(t, len(sysident.DBName), 0)
 }
 
@@ -68,5 +69,103 @@ func TestDropReplicationSlot(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	require.NoError(t, err)
+}
+
+func TestStartReplication(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
+	require.NoError(t, err)
+
+	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	require.NoError(t, err)
+
+	err = pglogrepl.StartReplication(ctx, conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{})
+	require.NoError(t, err)
+
+	go func() {
+		config, err := pgconn.ParseConfig(os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+		require.NoError(t, err)
+		delete(config.RuntimeParams, "replication")
+
+		conn, err := pgconn.ConnectConfig(ctx, config)
+		require.NoError(t, err)
+		defer closeConn(t, conn)
+
+		_, err = conn.Exec(ctx, `
+create table t(id int primary key, name text);
+
+insert into t values (1, 'foo');
+insert into t values (2, 'bar');
+insert into t values (3, 'baz');
+
+update t set name='quz' where id=3;
+
+delete from t where id=2;
+
+drop table t;
+`).ReadAll()
+		require.NoError(t, err)
+	}()
+
+	rxKeepAlive := func() pglogrepl.PrimaryKeepaliveMessage {
+		msg, err := conn.ReceiveMessage(ctx)
+		require.NoError(t, err)
+		cdMsg, ok := msg.(*pgproto3.CopyData)
+		require.True(t, ok)
+
+		require.Equal(t, byte(pglogrepl.PrimaryKeepaliveMessageByteID), cdMsg.Data[0])
+		pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(cdMsg.Data[1:])
+		require.NoError(t, err)
+		return pkm
+	}
+
+	rxXLogData := func() pglogrepl.XLogData {
+		msg, err := conn.ReceiveMessage(ctx)
+		require.NoError(t, err)
+		cdMsg, ok := msg.(*pgproto3.CopyData)
+		require.True(t, ok)
+
+		require.Equal(t, byte(pglogrepl.XLogDataByteID), cdMsg.Data[0])
+		xld, err := pglogrepl.ParseXLogData(cdMsg.Data[1:])
+		require.NoError(t, err)
+		return xld
+	}
+
+	rxKeepAlive()
+	xld := rxXLogData()
+	assert.Equal(t, "BEGIN", string(xld.WALData[:5]))
+	xld = rxXLogData()
+	assert.Equal(t, "table public.t: INSERT: id[integer]:1 name[text]:'foo'", string(xld.WALData))
+	xld = rxXLogData()
+	assert.Equal(t, "table public.t: INSERT: id[integer]:2 name[text]:'bar'", string(xld.WALData))
+	xld = rxXLogData()
+	assert.Equal(t, "table public.t: INSERT: id[integer]:3 name[text]:'baz'", string(xld.WALData))
+	xld = rxXLogData()
+	assert.Equal(t, "table public.t: UPDATE: id[integer]:3 name[text]:'quz'", string(xld.WALData))
+	xld = rxXLogData()
+	assert.Equal(t, "table public.t: DELETE: id[integer]:2", string(xld.WALData))
+	xld = rxXLogData()
+	assert.Equal(t, "COMMIT", string(xld.WALData[:6]))
+}
+
+func TestSendStandbyStatusUpdate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
+	require.NoError(t, err)
+
+	err = pglogrepl.SendStandbyStatusUpdate(ctx, conn, pglogrepl.StandbyStatusUpdate{WALWritePosition: sysident.XLogPos})
 	require.NoError(t, err)
 }
