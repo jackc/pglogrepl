@@ -1,3 +1,7 @@
+// pglogrepl package implements PostgreSQL logical replication client functionality.
+//
+// Proper use of this package requires understanding the underlying PostgreSQL concepts.
+// See https://www.postgresql.org/docs/current/protocol-replication.html.
 package pglogrepl
 
 import (
@@ -44,6 +48,7 @@ func ParseLSN(s string) (LSN, error) {
 	return LSN((upperHalf << 32) + lowerHalf), nil
 }
 
+// IdentifySystemResult is the parsed result of the IDENTIFY_SYSTEM command.
 type IdentifySystemResult struct {
 	SystemID string
 	Timeline int32
@@ -51,6 +56,7 @@ type IdentifySystemResult struct {
 	DBName   string
 }
 
+// IdentifySystem executes the IDENTIFY_SYSTEM command.
 func IdentifySystem(ctx context.Context, conn *pgconn.PgConn) (IdentifySystemResult, error) {
 	return ParseIdentifySystem(conn.Exec(ctx, "IDENTIFY_SYSTEM"))
 }
@@ -99,6 +105,7 @@ type CreateReplicationSlotOptions struct {
 	SnapshotAction string
 }
 
+// CreateReplicationSlotResult is the parsed results the CREATE_REPLICATION_SLOT command.
 type CreateReplicationSlotResult struct {
 	SlotName        string
 	ConsistentPoint string
@@ -171,6 +178,7 @@ type StartReplicationOptions struct {
 	Timeline int32 // 0 means current server timeline
 }
 
+// StartReplication begins the replication process by executing the START_REPLICATION command.
 func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string, startLSN LSN, options StartReplicationOptions) error {
 	var timelineString string
 	if options.Timeline > 0 {
@@ -209,6 +217,7 @@ type PrimaryKeepaliveMessage struct {
 	ReplyRequested bool
 }
 
+// ParsePrimaryKeepaliveMessage parses a Primary keepalive message from the server.
 func ParsePrimaryKeepaliveMessage(buf []byte) (PrimaryKeepaliveMessage, error) {
 	var pkm PrimaryKeepaliveMessage
 	if len(buf) != 17 {
@@ -229,6 +238,7 @@ type XLogData struct {
 	WALData      []byte
 }
 
+// ParseXLogData parses a XLogData message from the server.
 func ParseXLogData(buf []byte) (XLogData, error) {
 	var xld XLogData
 	if len(buf) < 24 {
@@ -243,6 +253,7 @@ func ParseXLogData(buf []byte) (XLogData, error) {
 	return xld, nil
 }
 
+// StandbyStatusUpdate is a message sent from the client that acknowledges receipt of WAL records.
 type StandbyStatusUpdate struct {
 	WALWritePosition LSN       // The WAL position that's been locally written
 	WALFlushPosition LSN       // The WAL position that's been locally flushed
