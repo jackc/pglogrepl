@@ -1,3 +1,6 @@
+[![](https://godoc.org/github.com/jackc/pglogrepl?status.svg)](https://godoc.org/github.com/jackc/pglogrepl)
+[![Build Status](https://travis-ci.org/jackc/pglogrepl.svg)](https://travis-ci.org/jackc/pglogrepl)
+
 # pglogrepl
 
 pglogrepl is a Go package for PostgreSQL logical replication.
