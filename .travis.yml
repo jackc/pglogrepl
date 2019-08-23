@@ -20,7 +20,6 @@ env:
   matrix:
     - PGVERSION=11
     - PGVERSION=10
-    - PGVERSION=9.6
 
 cache:
   directories:
