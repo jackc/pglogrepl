@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgproto3/v2"
-	errors "golang.org/x/xerrors"
 )
 
 func main() {
@@ -57,7 +56,7 @@ func main() {
 		msg, err := conn.ReceiveMessage(ctx)
 		cancel()
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
+			if pgconn.Timeout(err) {
 				continue
 			}
 			log.Fatalln("ReceiveMessage failed:", err)
