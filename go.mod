@@ -1,4 +1,4 @@
-module github.com/jackc/pglogrepl
+module github.com/Slava/pglogrepl
 
 go 1.12
 
