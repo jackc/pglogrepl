@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
+	"github.com/Slava/pgconn"
+	"github.com/Slava/pgproto3/v2"
 	"github.com/jackc/pgio"
-	"github.com/jackc/pgproto3/v2"
 	errors "golang.org/x/xerrors"
 )
 
