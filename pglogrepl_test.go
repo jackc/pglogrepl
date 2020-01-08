@@ -155,6 +155,67 @@ drop table t;
 	assert.Equal(t, "COMMIT", string(xld.WALData[:6]))
 }
 
+func TestStartReplicationPhysical(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
+	require.NoError(t, err)
+
+	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, slotName, "", pglogrepl.CreateReplicationSlotOptions{Temporary: true, Mode: pglogrepl.PhysicalReplication})
+	require.NoError(t, err)
+
+	err = pglogrepl.StartReplication(ctx, conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{Mode: pglogrepl.PhysicalReplication})
+	require.NoError(t, err)
+
+	go func() {
+		config, err := pgconn.ParseConfig(os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+		require.NoError(t, err)
+		delete(config.RuntimeParams, "replication")
+
+		conn, err := pgconn.ConnectConfig(ctx, config)
+		require.NoError(t, err)
+		defer closeConn(t, conn)
+
+		_, err = conn.Exec(ctx, `
+create table mytable(id int primary key, name text);
+drop table mytable;
+`).ReadAll()
+		require.NoError(t, err)
+	}()
+
+	_ = func() pglogrepl.PrimaryKeepaliveMessage {
+		msg, err := conn.ReceiveMessage(ctx)
+		require.NoError(t, err)
+		cdMsg, ok := msg.(*pgproto3.CopyData)
+		require.True(t, ok)
+
+		require.Equal(t, byte(pglogrepl.PrimaryKeepaliveMessageByteID), cdMsg.Data[0])
+		pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(cdMsg.Data[1:])
+		require.NoError(t, err)
+		return pkm
+	}
+
+	rxXLogData := func() pglogrepl.XLogData {
+		msg, err := conn.ReceiveMessage(ctx)
+		require.NoError(t, err)
+		cdMsg, ok := msg.(*pgproto3.CopyData)
+		require.True(t, ok)
+
+		require.Equal(t, byte(pglogrepl.XLogDataByteID), cdMsg.Data[0])
+		xld, err := pglogrepl.ParseXLogData(cdMsg.Data[1:])
+		require.NoError(t, err)
+		return xld
+	}
+
+	xld := rxXLogData()
+	assert.Contains(t, string(xld.WALData), "mytable")
+}
+
 func TestSendStandbyStatusUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()

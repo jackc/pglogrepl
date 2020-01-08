@@ -27,6 +27,22 @@ const (
 	StandbyStatusUpdateByteID     = 'r'
 )
 
+type ReplicationMode int
+
+const (
+	LogicalReplication ReplicationMode = iota
+	PhysicalReplication
+)
+
+// String formats the mode into a postgres valid string
+func (mode ReplicationMode) String() string {
+	if mode == LogicalReplication {
+		return "LOGICAL"
+	} else {
+		return "PHYSICAL"
+	}
+}
+
 // LSN is a PostgreSQL Log Sequence Number. See https://www.postgresql.org/docs/current/datatype-pg-lsn.html.
 type LSN uint64
 
@@ -107,6 +123,7 @@ func ParseIdentifySystem(mrr *pgconn.MultiResultReader) (IdentifySystemResult, e
 type CreateReplicationSlotOptions struct {
 	Temporary      bool
 	SnapshotAction string
+	Mode           ReplicationMode
 }
 
 // CreateReplicationSlotResult is the parsed results the CREATE_REPLICATION_SLOT command.
@@ -129,7 +146,7 @@ func CreateReplicationSlot(
 	if options.Temporary {
 		temporaryString = "TEMPORARY"
 	}
-	sql := fmt.Sprintf("CREATE_REPLICATION_SLOT %s %s LOGICAL %s %s", slotName, temporaryString, outputPlugin, options.SnapshotAction)
+	sql := fmt.Sprintf("CREATE_REPLICATION_SLOT %s %s %s %s %s", slotName, temporaryString, options.Mode, outputPlugin, options.SnapshotAction)
 	return ParseCreateReplicationSlot(conn.Exec(ctx, sql))
 }
 
@@ -180,6 +197,7 @@ func DropReplicationSlot(ctx context.Context, conn *pgconn.PgConn, slotName stri
 
 type StartReplicationOptions struct {
 	Timeline int32 // 0 means current server timeline
+	Mode     ReplicationMode
 }
 
 // StartReplication begins the replication process by executing the START_REPLICATION command.
@@ -188,7 +206,7 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 	if options.Timeline > 0 {
 		timelineString = fmt.Sprintf("TIMELINE %d", options.Timeline)
 	}
-	sql := fmt.Sprintf("START_REPLICATION SLOT %s LOGICAL %s %s", slotName, startLSN, timelineString)
+	sql := fmt.Sprintf("START_REPLICATION SLOT %s %s %s %s", slotName, options.Mode, startLSN, timelineString)
 
 	buf := (&pgproto3.Query{String: sql}).Encode(nil)
 	err := conn.SendBytes(ctx, buf)
