@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+//	const outputPlugin = "test_decoding"
+	const outputPlugin = "pglogical"
 	conn, err := pgconn.Connect(context.Background(), os.Getenv("PGLOGREPL_DEMO_CONN_STRING"))
 	if err != nil {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
@@ -26,13 +28,16 @@ func main() {
 
 	slotName := "pglogrepl_demo"
 
-	_, err = pglogrepl.CreateReplicationSlot(context.Background(), conn, slotName, "test_decoding", pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	_, err = pglogrepl.CreateReplicationSlot(context.Background(), conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
 	if err != nil {
 		log.Fatalln("CreateReplicationSlot failed:", err)
 	}
 	log.Println("Created temporary replication slot:", slotName)
-
-	err = pglogrepl.StartReplication(context.Background(), conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{})
+	var pluginArguments []string
+	if outputPlugin == "pglogical" {
+		pluginArguments = []string{"startup_params_format '1'", "max_proto_version '1'", "min_proto_version '1'"}
+	}
+	err = pglogrepl.StartReplication(context.Background(), conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{PluginArgs: pluginArguments})
 	if err != nil {
 		log.Fatalln("StartReplication failed:", err)
 	}
