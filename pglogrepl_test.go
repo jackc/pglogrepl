@@ -90,6 +90,9 @@ func TestStartReplication(t *testing.T) {
 	require.NoError(t, err)
 
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+
 		config, err := pgconn.ParseConfig(os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
 		require.NoError(t, err)
 		delete(config.RuntimeParams, "replication")
@@ -173,6 +176,9 @@ func TestStartReplicationPhysical(t *testing.T) {
 	require.NoError(t, err)
 
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+
 		config, err := pgconn.ParseConfig(os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
 		require.NoError(t, err)
 		delete(config.RuntimeParams, "replication")
