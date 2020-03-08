@@ -13,7 +13,8 @@ import (
 
 func main() {
 //	const outputPlugin = "test_decoding"
-	const outputPlugin = "pglogical"
+	//const outputPlugin = "pglogical"
+	const outputPlugin = "pgoutput"
 	conn, err := pgconn.Connect(context.Background(), os.Getenv("PGLOGREPL_DEMO_CONN_STRING"))
 	if err != nil {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
@@ -28,6 +29,7 @@ func main() {
 
 	slotName := "pglogrepl_demo"
 
+
 	_, err = pglogrepl.CreateReplicationSlot(context.Background(), conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
 	if err != nil {
 		log.Fatalln("CreateReplicationSlot failed:", err)
@@ -36,6 +38,8 @@ func main() {
 	var pluginArguments []string
 	if outputPlugin == "pglogical" {
 		pluginArguments = []string{"startup_params_format '1'", "max_proto_version '1'", "min_proto_version '1'"}
+	}else if outputPlugin == "pgoutput" {
+		pluginArguments = []string{"proto_version '1'","publication_names 'pglogrepl_demo'"}
 	}
 	err = pglogrepl.StartReplication(context.Background(), conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{PluginArgs: pluginArguments})
 	if err != nil {
