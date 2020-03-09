@@ -12,14 +12,25 @@ import (
 )
 
 func main() {
-//	const outputPlugin = "test_decoding"
-	//const outputPlugin = "pglogical"
+	//	const outputPlugin = "test_decoding"
 	const outputPlugin = "pgoutput"
 	conn, err := pgconn.Connect(context.Background(), os.Getenv("PGLOGREPL_DEMO_CONN_STRING"))
 	if err != nil {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
 	}
 	defer conn.Close(context.Background())
+
+	var pluginArguments []string
+	if outputPlugin == "pgoutput" {
+		result := conn.Exec(context.Background(), "CREATE PUBLICATION pglogrepl_demo FOR ALL TABLES;")
+		_, err := result.ReadAll()
+		if err != nil {
+			log.Fatalln("create publication error")
+		}
+		log.Println("create publication pglogrepl_demo")
+
+		pluginArguments = []string{"proto_version '1'", "publication_names 'pglogrepl_demo'"}
+	}
 
 	sysident, err := pglogrepl.IdentifySystem(context.Background(), conn)
 	if err != nil {
@@ -29,18 +40,11 @@ func main() {
 
 	slotName := "pglogrepl_demo"
 
-
 	_, err = pglogrepl.CreateReplicationSlot(context.Background(), conn, slotName, outputPlugin, pglogrepl.CreateReplicationSlotOptions{Temporary: true})
 	if err != nil {
 		log.Fatalln("CreateReplicationSlot failed:", err)
 	}
 	log.Println("Created temporary replication slot:", slotName)
-	var pluginArguments []string
-	if outputPlugin == "pglogical" {
-		pluginArguments = []string{"startup_params_format '1'", "max_proto_version '1'", "min_proto_version '1'"}
-	}else if outputPlugin == "pgoutput" {
-		pluginArguments = []string{"proto_version '1'","publication_names 'pglogrepl_demo'"}
-	}
 	err = pglogrepl.StartReplication(context.Background(), conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{PluginArgs: pluginArguments})
 	if err != nil {
 		log.Fatalln("StartReplication failed:", err)
