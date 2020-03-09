@@ -22,10 +22,16 @@ func main() {
 
 	var pluginArguments []string
 	if outputPlugin == "pgoutput" {
-		result := conn.Exec(context.Background(), "CREATE PUBLICATION pglogrepl_demo FOR ALL TABLES;")
+		result := conn.Exec(context.Background(), "DROP PUBLICATION IF EXISTS pglogrepl_demo;")
 		_, err := result.ReadAll()
 		if err != nil {
-			log.Fatalln("create publication error")
+			log.Fatalln("drop publication if exists error", err)
+		}
+
+		result = conn.Exec(context.Background(), "CREATE PUBLICATION pglogrepl_demo FOR ALL TABLES;")
+		_, err = result.ReadAll()
+		if err != nil {
+			log.Fatalln("create publication error", err)
 		}
 		log.Println("create publication pglogrepl_demo")
 
