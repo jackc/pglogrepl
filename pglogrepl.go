@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgconn"
@@ -196,8 +197,9 @@ func DropReplicationSlot(ctx context.Context, conn *pgconn.PgConn, slotName stri
 }
 
 type StartReplicationOptions struct {
-	Timeline int32 // 0 means current server timeline
-	Mode     ReplicationMode
+	Timeline   int32 // 0 means current server timeline
+	Mode       ReplicationMode
+	PluginArgs []string
 }
 
 // StartReplication begins the replication process by executing the START_REPLICATION command.
@@ -205,8 +207,17 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 	var timelineString string
 	if options.Timeline > 0 {
 		timelineString = fmt.Sprintf("TIMELINE %d", options.Timeline)
+		options.PluginArgs = append(options.PluginArgs, timelineString)
 	}
-	sql := fmt.Sprintf("START_REPLICATION SLOT %s %s %s %s", slotName, options.Mode, startLSN, timelineString)
+
+	sql := fmt.Sprintf("START_REPLICATION SLOT %s %s %s ", slotName, options.Mode, startLSN)
+	if options.Mode == LogicalReplication {
+		if len(options.PluginArgs) > 0 {
+			sql += fmt.Sprintf("(%s)", strings.Join(options.PluginArgs, ", "))
+		}
+	} else {
+		sql += fmt.Sprintf("%s", timelineString)
+	}
 
 	buf := (&pgproto3.Query{String: sql}).Encode(nil)
 	err := conn.SendBytes(ctx, buf)
