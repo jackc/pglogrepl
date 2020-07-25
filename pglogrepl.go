@@ -121,6 +121,45 @@ func ParseIdentifySystem(mrr *pgconn.MultiResultReader) (IdentifySystemResult, e
 	return isr, nil
 }
 
+// TimelineHistoryResult is the parsed result of the TIMELINE_HISTORY command.
+type TimelineHistoryResult struct {
+	FileName string
+	Content  []byte
+}
+
+// TimelineHistory executes the TIMELINE_HISTORY command.
+func TimelineHistory(ctx context.Context, conn *pgconn.PgConn, timeline int32) (TimelineHistoryResult, error) {
+	sql := fmt.Sprintf("TIMELINE_HISTORY %d", timeline)
+	return ParseTimelineHistory(conn.Exec(ctx, sql))
+}
+
+// ParseTimelineHistory parses the result of the TIMELINE_HISTORY command.
+func ParseTimelineHistory(mrr *pgconn.MultiResultReader) (TimelineHistoryResult, error) {
+	var thr TimelineHistoryResult
+	results, err := mrr.ReadAll()
+	if err != nil {
+		return thr, err
+	}
+
+	if len(results) != 1 {
+		return thr, errors.Errorf("expected 1 result set, got %d", len(results))
+	}
+
+	result := results[0]
+	if len(result.Rows) != 1 {
+		return thr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+	}
+
+	row := result.Rows[0]
+	if len(row) != 2 {
+		return thr, errors.Errorf("expected 2 result columns, got %d", len(row))
+	}
+
+	thr.FileName = string(row[0])
+	thr.Content = row[1]
+	return thr, nil
+}
+
 type CreateReplicationSlotOptions struct {
 	Temporary      bool
 	SnapshotAction string
