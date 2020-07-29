@@ -368,6 +368,53 @@ func SendStandbyStatusUpdate(ctx context.Context, conn *pgconn.PgConn, ssu Stand
 	return conn.SendBytes(ctx, buf)
 }
 
+// SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
+// to confirm ending the copy-both mode.
+func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (CopyDoneResult, error) {
+	cd := &pgproto3.CopyDone{}
+	buf := cd.Encode(nil)
+
+	return ParseCopyDoneResult(conn.SendBytesWithResults(ctx, buf))
+}
+
+// CopyDoneResult is the parsed result as returned by the server after the client
+// sends a CopyDone to the server to confirm ending the copy-both mode.
+type CopyDoneResult struct {
+	Timeline int32
+	LSN      LSN
+}
+
+// ParseCopyDoneResult parses the result of ending the copy-both mode.
+func ParseCopyDoneResult(mrr *pgconn.MultiResultReader) (CopyDoneResult, error) {
+	var cdr CopyDoneResult
+	results, err := mrr.ReadAll()
+	if err != nil {
+		return cdr, err
+	}
+
+	if len(results) != 2 {
+		return cdr, errors.Errorf("expected 1 result set, got %d", len(results))
+	}
+
+	result := results[0]
+	if len(result.Rows) != 1 {
+		return cdr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+	}
+
+	row := result.Rows[0]
+	if len(row) != 2 {
+		return cdr, errors.Errorf("expected 2 result columns, got %d", len(row))
+	}
+
+	timeline, err := strconv.Atoi(string(row[0]))
+	if err != nil {
+		return cdr, err
+	}
+	cdr.Timeline = int32(timeline)
+	cdr.LSN, err = ParseLSN(string(row[1]))
+	return cdr, err
+}
+
 const microsecFromUnixEpochToY2K = 946684800 * 1000000
 
 func pgTimeToTime(microsecSinceY2K int64) time.Time {
