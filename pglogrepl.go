@@ -370,11 +370,24 @@ func SendStandbyStatusUpdate(ctx context.Context, conn *pgconn.PgConn, ssu Stand
 
 // SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
 // to confirm ending the copy-both mode.
-func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (CopyDoneResult, error) {
+func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (result *CopyDoneResult, err error) {
 	cd := &pgproto3.CopyDone{}
 	buf := cd.Encode(nil)
-
-	return ParseCopyDoneResult(conn.SendBytesWithResults(ctx, buf))
+	err = conn.SendBytes(ctx, buf)
+	if err != nil {
+		return
+	}
+	message, err := conn.ReceiveMessage(ctx)
+	switch message.(type) {
+	case *pgproto3.CopyDone:
+		// Server returned a CopyDone, so client ended copy-both first.
+		// Not at end of timeline, and server will not send a CopyDoneResult
+		mrr := conn.ReceiveResults(ctx)
+		_, err = mrr.ReadAll()
+		return
+	default:
+		return ParseCopyDoneResult(conn.ReceiveResults(ctx))
+	}
 }
 
 // CopyDoneResult is the parsed result as returned by the server after the client
@@ -385,8 +398,7 @@ type CopyDoneResult struct {
 }
 
 // ParseCopyDoneResult parses the result of ending the copy-both mode.
-func ParseCopyDoneResult(mrr *pgconn.MultiResultReader) (CopyDoneResult, error) {
-	var cdr CopyDoneResult
+func ParseCopyDoneResult(mrr *pgconn.MultiResultReader) (cdr *CopyDoneResult, err error) {
 	results, err := mrr.ReadAll()
 	if err != nil {
 		return cdr, err
