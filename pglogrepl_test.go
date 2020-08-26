@@ -2,6 +2,7 @@ package pglogrepl_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -37,6 +38,34 @@ func TestIdentifySystem(t *testing.T) {
 	assert.True(t, sysident.Timeline > 0)
 	assert.True(t, sysident.XLogPos > 0)
 	assert.Greater(t, len(sysident.DBName), 0)
+}
+
+func TestGetHistoryFile(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING")+" replication=on")
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
+	require.NoError(t, err)
+
+	tlh, err := pglogrepl.TimelineHistory(ctx, conn, 0)
+	require.Error(t, err)
+
+	tlh, err = pglogrepl.TimelineHistory(ctx, conn, 1)
+	require.Error(t, err)
+
+	if sysident.Timeline > 1 {
+		// This test requires a Postgres with at least 1 timeline increase (promote, or recover)...
+		tlh, err = pglogrepl.TimelineHistory(ctx, conn, sysident.Timeline)
+		require.NoError(t, err)
+
+		expectedFileName := fmt.Sprintf("%08X.history", sysident.Timeline)
+		assert.Equal(t, expectedFileName, tlh.FileName)
+		assert.Greater(t, len(tlh.Content), 0)
+	}
 }
 
 func TestCreateReplicationSlot(t *testing.T) {
@@ -159,7 +188,7 @@ drop table t;
 }
 
 func TestStartReplicationPhysical(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*50)
 	defer cancel()
 
 	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
@@ -220,6 +249,10 @@ drop table mytable;
 
 	xld := rxXLogData()
 	assert.Contains(t, string(xld.WALData), "mytable")
+
+	copyDoneResult, err := pglogrepl.SendStandbyCopyDone(ctx, conn)
+	require.NoError(t, err)
+	assert.Nil(t, copyDoneResult)
 }
 
 func TestSendStandbyStatusUpdate(t *testing.T) {
