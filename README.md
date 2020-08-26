@@ -13,6 +13,7 @@ https://www.postgresql.org/docs/current/protocol-replication.html.
 ## Example
 
 In `example/pglogrepl_demo`, there is an example demo program that connects to a database and logs all messages sent over logical replication.
+In `example/pgphysrepl_demo`, there is an example demo program that connects to a database and logs all messages sent over physical replication.
 
 ## Testing
 
