@@ -44,7 +44,11 @@ func TestGetHistoryFile(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING")+" replication=on")
+	config, err := pgconn.ParseConfig(os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	config.RuntimeParams["replication"] = "on"
+
+	conn, err := pgconn.ConnectConfig(ctx, config)
 	require.NoError(t, err)
 	defer closeConn(t, conn)
 
