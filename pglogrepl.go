@@ -368,28 +368,6 @@ func SendStandbyStatusUpdate(ctx context.Context, conn *pgconn.PgConn, ssu Stand
 	return conn.SendBytes(ctx, buf)
 }
 
-// SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
-// to confirm ending the copy-both mode.
-func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (result *CopyDoneResult, err error) {
-	cd := &pgproto3.CopyDone{}
-	buf := cd.Encode(nil)
-	err = conn.SendBytes(ctx, buf)
-	if err != nil {
-		return
-	}
-	message, err := conn.ReceiveMessage(ctx)
-	switch message.(type) {
-	case *pgproto3.CopyDone:
-		// Server returned a CopyDone, so client ended copy-both first.
-		// Not at end of timeline, and server will not send a CopyDoneResult
-		mrr := conn.ReceiveResults(ctx)
-		_, err = mrr.ReadAll()
-		return
-	default:
-		return ParseCopyDoneResult(conn.ReceiveResults(ctx))
-	}
-}
-
 // CopyDoneResult is the parsed result as returned by the server after the client
 // sends a CopyDone to the server to confirm ending the copy-both mode.
 type CopyDoneResult struct {
@@ -397,20 +375,31 @@ type CopyDoneResult struct {
 	LSN      LSN
 }
 
-// ParseCopyDoneResult parses the result of ending the copy-both mode.
-func ParseCopyDoneResult(mrr *pgconn.MultiResultReader) (cdr *CopyDoneResult, err error) {
-	results, err := mrr.ReadAll()
+// SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
+// to confirm ending the copy-both mode.
+func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (cdr *CopyDoneResult, err error) {
+	cd := &pgproto3.CopyDone{}
+	buf := cd.Encode(nil)
+	err = conn.SendBytes(ctx, buf)
 	if err != nil {
-		return cdr, err
+		return
 	}
+	mrr := conn.ReceiveResults(ctx)
+	results, err := mrr.ReadAll()
 
 	if len(results) != 2 {
+		// Server returned a CopyDone, so client ended copy-both first.
+		// Not at end of timeline, and server will not send a CopyDoneResult
 		return cdr, errors.Errorf("expected 1 result set, got %d", len(results))
 	}
 
 	result := results[0]
-	if len(result.Rows) != 1 {
-		return cdr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+	if len(result.Rows) > 1 {
+		return cdr, errors.Errorf("expected 0 or 1 result row, got %d", len(result.Rows))
+	}
+	if len(result.Rows) == 0  {
+		// This is expected behaviour when client was first to send CopyDone
+		return
 	}
 
 	row := result.Rows[0]
@@ -422,6 +411,7 @@ func ParseCopyDoneResult(mrr *pgconn.MultiResultReader) (cdr *CopyDoneResult, er
 	if err != nil {
 		return cdr, err
 	}
+	cdr = &CopyDoneResult{}
 	cdr.Timeline = int32(timeline)
 	cdr.LSN, err = ParseLSN(string(row[1]))
 	return cdr, err
