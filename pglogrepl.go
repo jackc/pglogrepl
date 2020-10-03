@@ -283,6 +283,230 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 	}
 }
 
+type BaseBackupOptions struct {
+	// Request information required to generate a progress report, but might as such have a negative impact on the performance.
+	Progress          bool
+	// Sets the label of the backup. If none is specified, a backup label of 'wal-g' will be used.
+	Label             string
+	// Request a fast checkpoint.
+	Fast              bool
+	// Include the necessary WAL segments in the backup. This will include all the files between start and stop backup in the pg_wal directory of the base directory tar file.
+	Wal               bool
+	// By default, the backup will wait until the last required WAL segment has been archived, or emit a warning if log archiving is not enabled.
+	// Specifying NOWAIT disables both the waiting and the warning, leaving the client responsible for ensuring the required log is available.
+	NoWait            bool
+	// Limit (throttle) the maximum amount of data transferred from server to client per unit of time (kb/s).
+	MaxRate           int
+	// Include information about symbolic links present in the directory pg_tblspc in a file named tablespace_map.
+	TablespaceMap     bool
+	// Disable checksums being verified during a base backup.
+	// Note that NoVerifyChecksums=true is only supported since PG11
+	NoVerifyChecksums bool
+}
+
+func (bbo BaseBackupOptions) Sql() string {
+	parts := []string { "BASE_BACKUP"}
+	if bbo.Label != "" {
+		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''") + "'")
+	}
+	if bbo.Progress {
+		parts = append(parts, "PROGRESS")
+	}
+	if bbo.Fast {
+		parts = append(parts, "FAST")
+	}
+	if bbo.Wal {
+		parts = append(parts, "WAL")
+	}
+	if bbo.NoWait {
+		parts = append(parts, "NOWAIT")
+	}
+	if bbo.MaxRate >=32 {
+		parts = append(parts, fmt.Sprintf("MAX_RATE %d", bbo.MaxRate))
+	}
+	if bbo.TablespaceMap {
+		parts = append(parts, "TABLESPACE_MAP")
+	}
+	if bbo.NoVerifyChecksums {
+		parts = append(parts, "NOVERIFY_CHECKSUMS")
+	}
+	return strings.Join(parts, " ")
+}
+
+// BaseBackupTablespace represents a tablespace in the backup
+type BaseBackupTablespace struct {
+	Oid int
+	Location string
+	Size int8
+}
+
+// BaseBackupResult will hold the return values  of the BaseBackup command
+type BaseBackupResult struct {
+	Lsn LSN
+	TimelineID int32
+	Tablespaces []BaseBackupTablespace
+}
+
+// StartBaseBackup begins the process for copying a basebackup by executing the BASE_BACKUP command.
+func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBackupOptions) (result BaseBackupResult, err error) {
+	sql := options.Sql()
+
+	buf := (&pgproto3.Query{String: sql}).Encode(nil)
+	err = conn.SendBytes(ctx, buf)
+	if err != nil {
+		return result, errors.Errorf("failed to send BASE_BACKUP: %w", err)
+	}
+	// From here Postgres returns result sets, but pgconn has no infrastructure to properly capture them.
+	// So we capture data low level with sub functions, before we return from this function when we get to the CopyData part.
+	result.Lsn, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
+	if err != nil {
+		return result, err
+	}
+	result.Tablespaces, err = getTableSpaceInfo(ctx, conn)
+	return result, err
+}
+
+// getBaseBackupInfo returns the start or end position of the backup as returned by Postgres
+func getBaseBackupInfo(ctx context.Context, conn *pgconn.PgConn) (start LSN, timelineID int32, err error) {
+	for {
+		msg, err := conn.ReceiveMessage(ctx)
+		if err != nil {
+			return start, timelineID, errors.Errorf("failed to receive message: %w", err)
+		}
+		switch msg := msg.(type) {
+		case *pgproto3.RowDescription:
+			if len(msg.Fields) != 2 {
+				return start, timelineID, errors.Errorf("expected 2 column headers, received: %d", len(msg.Fields))
+			}
+			colName := string(msg.Fields[0].Name)
+			if colName != "recptr" {
+				return start, timelineID, errors.Errorf("unexpected col name for recptr col: %s", colName)
+			}
+			colName = string(msg.Fields[1].Name)
+			if colName != "tli" {
+				return start, timelineID, errors.Errorf("unexpected col name for tli col: %s", colName)
+			}
+		case *pgproto3.DataRow:
+			if len(msg.Values) != 2 {
+				return start, timelineID, errors.Errorf("expected 2 columns, received: %d", len(msg.Values))
+			}
+			colData := string(msg.Values[0])
+			start, err = ParseLSN(colData)
+			if err != nil {
+				return start, timelineID, errors.Errorf("cannot convert result to LSN: %s", colData)
+			}
+			colData = string(msg.Values[1])
+			tli, err := strconv.Atoi(colData)
+			if err != nil {
+				return start, timelineID, errors.Errorf("cannot convert timelineID to int: %s", colData)
+			}
+			timelineID = int32(tli)
+		case *pgproto3.NoticeResponse:
+		case *pgproto3.CommandComplete:
+			return start, timelineID, nil
+		default:
+			return start, timelineID, errors.Errorf("unexpected response: %t", msg)
+		}
+	}
+}
+
+// getBaseBackupInfo returns the start or end position of the backup as returned by Postgres
+func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBackupTablespace, err error) {
+	for {
+		msg, err := conn.ReceiveMessage(ctx)
+		if err != nil {
+			return tbss, errors.Errorf("failed to receive message: %w", err)
+		}
+		switch msg := msg.(type) {
+		case *pgproto3.RowDescription:
+			if len(msg.Fields) != 3 {
+				return tbss, errors.Errorf("expected 3 column headers, received: %d", len(msg.Fields))
+			}
+			colName := string(msg.Fields[0].Name)
+			if colName != "spcoid" {
+				return tbss, errors.Errorf("unexpected col name for spcoid col: %s", colName)
+			}
+			colName = string(msg.Fields[1].Name)
+			if colName != "spclocation" {
+				return tbss, errors.Errorf("unexpected col name for spclocation col: %s", colName)
+			}
+			colName = string(msg.Fields[2].Name)
+			if colName != "size" {
+				return tbss, errors.Errorf("unexpected col name for size col: %s", colName)
+			}
+		case *pgproto3.DataRow:
+			if len(msg.Values) != 3 {
+				return tbss, errors.Errorf("expected 3 columns, received: %d", len(msg.Values))
+			}
+			if msg.Values[0] == nil {
+				continue
+			}
+			tbs := BaseBackupTablespace{}
+			colData := string(msg.Values[0])
+			tbs.Oid, err = strconv.Atoi(colData)
+			if err != nil {
+				return tbss, errors.Errorf("cannot convert spcoid to int: %s", colData)
+			}
+			tbs.Location = string(msg.Values[1])
+			if msg.Values[2] != nil {
+				colData := string(msg.Values[2])
+				size, err := strconv.Atoi(colData)
+				if err != nil {
+					return tbss, errors.Errorf("cannot convert size to int: %s", colData)
+				}
+				tbs.Size = int8(size)
+			}
+			tbss = append(tbss, tbs)
+		case *pgproto3.CommandComplete:
+			return tbss, nil
+		default:
+			return tbss, errors.Errorf("unexpected response: %t", msg)
+		}
+	}
+}
+
+// NextTablespace consumes some msgs so we are at start of CopyData
+func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error){
+
+	for {
+		msg, err := conn.ReceiveMessage(ctx)
+		if err != nil {
+			return errors.Errorf("failed to receive message: %w", err)
+		}
+
+		switch msg := msg.(type) {
+		case *pgproto3.CopyOutResponse:
+			return nil
+		case *pgproto3.CopyData:
+			return nil
+		case *pgproto3.ErrorResponse:
+			return pgconn.ErrorResponseToPgError(msg)
+		case *pgproto3.NoticeResponse:
+		case *pgproto3.RowDescription:
+
+		default:
+			return errors.Errorf("unexpected response: %t", msg)
+		}
+	}
+}
+
+// FinishBaseBackup wraps up a backup after copying all results from the BASE_BACKUP command.
+func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBackupResult, err error) {
+
+	// From here Postgres returns result sets, but pgconn has no infrastructure to properly capture them.
+	// So we capture data low level with sub functions, before we return from this function when we get to the CopyData part.
+	result.Lsn, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
+	if err != nil {
+		return result, err
+	}
+	result.Tablespaces, err = getTableSpaceInfo(ctx, conn)
+	if err != nil {
+		return result, err
+	}
+	_, err = SendStandbyCopyDone(context.Background(), conn)
+	return result, nil
+}
+
 type PrimaryKeepaliveMessage struct {
 	ServerWALEnd   LSN
 	ServerTime     time.Time
