@@ -259,6 +259,62 @@ drop table mytable;
 	assert.Nil(t, copyDoneResult)
 }
 
+func TestBaseBackup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
+	defer cancel()
+
+	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	require.NoError(t, err)
+	defer closeConn(t, conn)
+
+	options := pglogrepl.BaseBackupOptions{
+		NoVerifyChecksums: true,
+		Progress:          true,
+		Label:             "pglogrepltest",
+		Fast:              true,
+		Wal: 			   true,
+		NoWait:			   true,
+		MaxRate:		   1024,
+		TablespaceMap:     true,
+	}
+	startRes, err := pglogrepl.StartBaseBackup(ctx, conn, options)
+	require.GreaterOrEqual(t, startRes.TimelineID, int32(1))
+	require.NoError(t, err)
+
+	//Write the tablespaces
+	for i := 0; i < len(startRes.Tablespaces) + 1; i++ {
+		f, err := os.Create(fmt.Sprintf("/tmp/pglogrepl_test_tbs_%d.tar", i))
+		require.NoError(t, err)
+		err = pglogrepl.NextTableSpace(context.Background(), conn)
+		var message pgproto3.BackendMessage
+		L:
+		for {
+			message, err = conn.ReceiveMessage(ctx)
+			require.NoError(t, err)
+			switch msg := message.(type) {
+			case *pgproto3.CopyData:
+				_, err := f.Write(msg.Data)
+				require.NoError(t, err)
+			case *pgproto3.CopyDone:
+				break L
+			default:
+				t.Errorf("Received unexpected message: %#v\n", msg)
+			}
+		}
+		err = f.Close()
+		require.NoError(t, err)
+	}
+
+	stopRes, err := pglogrepl.FinishBaseBackup(ctx, conn)
+	require.NoError(t, err)
+	require.Equal(t, startRes.TimelineID, stopRes.TimelineID)
+	require.Equal(t, len(startRes.Tablespaces), len(stopRes.Tablespaces))
+	require.Less(t, uint64(startRes.Lsn), uint64(stopRes.Lsn))
+	_, err = pglogrepl.StartBaseBackup(ctx, conn, options)
+	require.NoError(t, err)
+}
+
+
 func TestSendStandbyStatusUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
