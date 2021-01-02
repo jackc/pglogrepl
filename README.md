@@ -48,6 +48,11 @@ max_replication_slots=5
 
 To run the tests set `PGLOGREPL_TEST_CONN_STRING` environment variable with a replication connection string (URL or DSN).
 
+Since the base backup would request postgres to create a backup tar and stream it, this test cn be disabled with
+```
+PGLOGREPL_SKIP_BASE_BACKUP=true
+```
+
 Example:
 
 ```
