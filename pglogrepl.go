@@ -291,12 +291,12 @@ type BaseBackupOptions struct {
 	// Request a fast checkpoint.
 	Fast              bool
 	// Include the necessary WAL segments in the backup. This will include all the files between start and stop backup in the pg_wal directory of the base directory tar file.
-	Wal               bool
+	WAL               bool
 	// By default, the backup will wait until the last required WAL segment has been archived, or emit a warning if log archiving is not enabled.
 	// Specifying NOWAIT disables both the waiting and the warning, leaving the client responsible for ensuring the required log is available.
 	NoWait            bool
 	// Limit (throttle) the maximum amount of data transferred from server to client per unit of time (kb/s).
-	MaxRate           int
+	MaxRate           int32
 	// Include information about symbolic links present in the directory pg_tblspc in a file named tablespace_map.
 	TablespaceMap     bool
 	// Disable checksums being verified during a base backup.
@@ -304,7 +304,7 @@ type BaseBackupOptions struct {
 	NoVerifyChecksums bool
 }
 
-func (bbo BaseBackupOptions) Sql() string {
+func (bbo BaseBackupOptions) sql() string {
 	parts := []string { "BASE_BACKUP"}
 	if bbo.Label != "" {
 		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''") + "'")
@@ -315,7 +315,7 @@ func (bbo BaseBackupOptions) Sql() string {
 	if bbo.Fast {
 		parts = append(parts, "FAST")
 	}
-	if bbo.Wal {
+	if bbo.WAL {
 		parts = append(parts, "WAL")
 	}
 	if bbo.NoWait {
@@ -335,21 +335,21 @@ func (bbo BaseBackupOptions) Sql() string {
 
 // BaseBackupTablespace represents a tablespace in the backup
 type BaseBackupTablespace struct {
-	Oid int
+	OID int32
 	Location string
 	Size int8
 }
 
 // BaseBackupResult will hold the return values  of the BaseBackup command
 type BaseBackupResult struct {
-	Lsn LSN
+	LSN LSN
 	TimelineID int32
 	Tablespaces []BaseBackupTablespace
 }
 
 // StartBaseBackup begins the process for copying a basebackup by executing the BASE_BACKUP command.
 func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBackupOptions) (result BaseBackupResult, err error) {
-	sql := options.Sql()
+	sql := options.sql()
 
 	buf := (&pgproto3.Query{String: sql}).Encode(nil)
 	err = conn.SendBytes(ctx, buf)
@@ -358,7 +358,7 @@ func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBacku
 	}
 	// From here Postgres returns result sets, but pgconn has no infrastructure to properly capture them.
 	// So we capture data low level with sub functions, before we return from this function when we get to the CopyData part.
-	result.Lsn, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
+	result.LSN, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
 	if err != nil {
 		return result, err
 	}
@@ -443,10 +443,11 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 			}
 			tbs := BaseBackupTablespace{}
 			colData := string(msg.Values[0])
-			tbs.Oid, err = strconv.Atoi(colData)
+			OID, err := strconv.Atoi(colData)
 			if err != nil {
 				return tbss, errors.Errorf("cannot convert spcoid to int: %s", colData)
 			}
+			tbs.OID = int32(OID)
 			tbs.Location = string(msg.Values[1])
 			if msg.Values[2] != nil {
 				colData := string(msg.Values[2])
@@ -495,7 +496,7 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 
 	// From here Postgres returns result sets, but pgconn has no infrastructure to properly capture them.
 	// So we capture data low level with sub functions, before we return from this function when we get to the CopyData part.
-	result.Lsn, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
+	result.LSN, result.TimelineID, err = getBaseBackupInfo(ctx, conn)
 	if err != nil {
 		return result, err
 	}

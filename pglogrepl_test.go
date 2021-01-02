@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -260,10 +261,18 @@ drop table mytable;
 }
 
 func TestBaseBackup(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
-	defer cancel()
+	// base backup test could take a long time. Therefore it can be disabled.
+	envSkipTest := os.Getenv("PGLOGREPL_SKIP_BASE_BACKUP")
+	if envSkipTest != "" {
+		skipTest, err := strconv.ParseBool(envSkipTest)
+		if err != nil {
+			t.Error(err)
+		} else if skipTest {
+			return
+		}
+	}
 
-	conn, err := pgconn.Connect(ctx, os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
+	conn, err := pgconn.Connect(context.Background(), os.Getenv("PGLOGREPL_TEST_CONN_STRING"))
 	require.NoError(t, err)
 	defer closeConn(t, conn)
 
@@ -272,12 +281,12 @@ func TestBaseBackup(t *testing.T) {
 		Progress:          true,
 		Label:             "pglogrepltest",
 		Fast:              true,
-		Wal: 			   true,
+		WAL: 			   true,
 		NoWait:			   true,
 		MaxRate:		   1024,
 		TablespaceMap:     true,
 	}
-	startRes, err := pglogrepl.StartBaseBackup(ctx, conn, options)
+	startRes, err := pglogrepl.StartBaseBackup(context.Background(), conn, options)
 	require.GreaterOrEqual(t, startRes.TimelineID, int32(1))
 	require.NoError(t, err)
 
@@ -289,7 +298,7 @@ func TestBaseBackup(t *testing.T) {
 		var message pgproto3.BackendMessage
 		L:
 		for {
-			message, err = conn.ReceiveMessage(ctx)
+			message, err = conn.ReceiveMessage(context.Background())
 			require.NoError(t, err)
 			switch msg := message.(type) {
 			case *pgproto3.CopyData:
@@ -305,12 +314,12 @@ func TestBaseBackup(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	stopRes, err := pglogrepl.FinishBaseBackup(ctx, conn)
+	stopRes, err := pglogrepl.FinishBaseBackup(context.Background(), conn)
 	require.NoError(t, err)
 	require.Equal(t, startRes.TimelineID, stopRes.TimelineID)
-	require.Equal(t, len(startRes.Tablespaces), len(stopRes.Tablespaces))
-	require.Less(t, uint64(startRes.Lsn), uint64(stopRes.Lsn))
-	_, err = pglogrepl.StartBaseBackup(ctx, conn, options)
+	require.Equal(t, len(stopRes.Tablespaces), 0)
+	require.Less(t, uint64(startRes.LSN), uint64(stopRes.LSN))
+	_, err = pglogrepl.StartBaseBackup(context.Background(), conn, options)
 	require.NoError(t, err)
 }
 
