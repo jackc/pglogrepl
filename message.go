@@ -393,7 +393,7 @@ func (m *TupleData) Decode(src []byte) (int, error) {
 		m.Columns = append(m.Columns, column)
 	}
 
-	return low + 1, nil
+	return low, nil
 }
 
 // InsertMessage is a insert message
