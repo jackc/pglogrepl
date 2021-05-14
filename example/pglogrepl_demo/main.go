@@ -101,6 +101,11 @@ func main() {
 					log.Fatalln("ParseXLogData failed:", err)
 				}
 				log.Println("XLogData =>", "WALStart", xld.WALStart, "ServerWALEnd", xld.ServerWALEnd, "ServerTime:", xld.ServerTime, "WALData", string(xld.WALData))
+				logicalMsg, err := pglogrepl.Parse(xld.WALData)
+				if err != nil {
+					log.Fatalf("Parse logical replication message: %s", err)
+				}
+				log.Printf("Receive a logical replication message: %s", logicalMsg.Type())
 
 				clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
 			}
