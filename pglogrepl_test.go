@@ -13,7 +13,67 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+func TestLSNSuite(t *testing.T) {
+	suite.Run(t, new(lsnSuite))
+}
+
+type lsnSuite struct {
+	suite.Suite
+}
+
+func (s *lsnSuite) R() *require.Assertions {
+	return s.Require()
+}
+
+func (s *lsnSuite) Equal(e, a interface{}, args ...interface{}) {
+	s.R().Equal(e, a, args...)
+}
+
+func (s *lsnSuite) NoError(err error) {
+	s.R().NoError(err)
+}
+
+func (s *lsnSuite) TestScannerInterface() {
+	var lsn pglogrepl.LSN
+	lsnText := "16/B374D848"
+	lsnUint64 := uint64(97500059720)
+	var err error
+
+	err = lsn.Scan(lsnText)
+	s.NoError(err)
+	s.Equal(lsnText, lsn.String())
+
+	err = lsn.Scan([]byte(lsnText))
+	s.NoError(err)
+	s.Equal(lsnText, lsn.String())
+
+	lsn = 0
+	err = lsn.Scan(lsnUint64)
+	s.NoError(err)
+	s.Equal(lsnText, lsn.String())
+
+	err = lsn.Scan(int64(lsnUint64))
+	s.Error(err)
+	s.T().Log(err)
+}
+
+func (s *lsnSuite) TestScanToNil() {
+	var lsnPtr *pglogrepl.LSN
+	err := lsnPtr.Scan("16/B374D848")
+	s.NoError(err)
+}
+
+func (s *lsnSuite) TestValueInterface() {
+	lsn := pglogrepl.LSN(97500059720)
+	driverValue, err := lsn.Value()
+	s.NoError(err)
+	lsnStr, ok := driverValue.(string)
+	s.R().True(ok)
+	s.Equal("16/B374D848", lsnStr)
+}
 
 const slotName = "pglogrepl_test"
 const outputPlugin = "test_decoding"
@@ -281,9 +341,9 @@ func TestBaseBackup(t *testing.T) {
 		Progress:          true,
 		Label:             "pglogrepltest",
 		Fast:              true,
-		WAL: 			   true,
-		NoWait:			   true,
-		MaxRate:		   1024,
+		WAL:               true,
+		NoWait:            true,
+		MaxRate:           1024,
 		TablespaceMap:     true,
 	}
 	startRes, err := pglogrepl.StartBaseBackup(context.Background(), conn, options)
@@ -291,12 +351,12 @@ func TestBaseBackup(t *testing.T) {
 	require.NoError(t, err)
 
 	//Write the tablespaces
-	for i := 0; i < len(startRes.Tablespaces) + 1; i++ {
+	for i := 0; i < len(startRes.Tablespaces)+1; i++ {
 		f, err := os.Create(fmt.Sprintf("/tmp/pglogrepl_test_tbs_%d.tar", i))
 		require.NoError(t, err)
 		err = pglogrepl.NextTableSpace(context.Background(), conn)
 		var message pgproto3.BackendMessage
-		L:
+	L:
 		for {
 			message, err = conn.ReceiveMessage(context.Background())
 			require.NoError(t, err)
@@ -322,7 +382,6 @@ func TestBaseBackup(t *testing.T) {
 	_, err = pglogrepl.StartBaseBackup(context.Background(), conn, options)
 	require.NoError(t, err)
 }
-
 
 func TestSendStandbyStatusUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
