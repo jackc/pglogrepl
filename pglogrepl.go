@@ -10,6 +10,7 @@ package pglogrepl
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -50,6 +51,45 @@ type LSN uint64
 // String formats the LSN value into the XXX/XXX format which is the text format used by PostgreSQL.
 func (lsn LSN) String() string {
 	return fmt.Sprintf("%X/%X", uint32(lsn>>32), uint32(lsn))
+}
+
+func (lsn *LSN) decodeText(src string) error {
+	lsnValue, err := ParseLSN(src)
+	if err != nil {
+		return err
+	}
+	*lsn = lsnValue
+
+	return nil
+}
+
+// Scan implements the Scanner interface.
+func (lsn *LSN) Scan(src interface{}) error {
+	if lsn == nil {
+		return nil
+	}
+
+	switch v := src.(type) {
+	case uint64:
+		*lsn = LSN(v)
+	case string:
+		if err := lsn.decodeText(v); err != nil {
+			return err
+		}
+	case []byte:
+		if err := lsn.decodeText(string(v)); err != nil {
+			return err
+		}
+	default:
+		return errors.Errorf("can not scan %T to LSN", src)
+	}
+
+	return nil
+}
+
+// Value implements the Valuer interface.
+func (lsn LSN) Value() (driver.Value, error) {
+	return driver.Value(lsn.String()), nil
 }
 
 // Parse the given XXX/XXX text format LSN used by PostgreSQL.
@@ -285,29 +325,29 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 
 type BaseBackupOptions struct {
 	// Request information required to generate a progress report, but might as such have a negative impact on the performance.
-	Progress          bool
+	Progress bool
 	// Sets the label of the backup. If none is specified, a backup label of 'wal-g' will be used.
-	Label             string
+	Label string
 	// Request a fast checkpoint.
-	Fast              bool
+	Fast bool
 	// Include the necessary WAL segments in the backup. This will include all the files between start and stop backup in the pg_wal directory of the base directory tar file.
-	WAL               bool
+	WAL bool
 	// By default, the backup will wait until the last required WAL segment has been archived, or emit a warning if log archiving is not enabled.
 	// Specifying NOWAIT disables both the waiting and the warning, leaving the client responsible for ensuring the required log is available.
-	NoWait            bool
+	NoWait bool
 	// Limit (throttle) the maximum amount of data transferred from server to client per unit of time (kb/s).
-	MaxRate           int32
+	MaxRate int32
 	// Include information about symbolic links present in the directory pg_tblspc in a file named tablespace_map.
-	TablespaceMap     bool
+	TablespaceMap bool
 	// Disable checksums being verified during a base backup.
 	// Note that NoVerifyChecksums=true is only supported since PG11
 	NoVerifyChecksums bool
 }
 
 func (bbo BaseBackupOptions) sql() string {
-	parts := []string { "BASE_BACKUP"}
+	parts := []string{"BASE_BACKUP"}
 	if bbo.Label != "" {
-		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''") + "'")
+		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''")+"'")
 	}
 	if bbo.Progress {
 		parts = append(parts, "PROGRESS")
@@ -321,7 +361,7 @@ func (bbo BaseBackupOptions) sql() string {
 	if bbo.NoWait {
 		parts = append(parts, "NOWAIT")
 	}
-	if bbo.MaxRate >=32 {
+	if bbo.MaxRate >= 32 {
 		parts = append(parts, fmt.Sprintf("MAX_RATE %d", bbo.MaxRate))
 	}
 	if bbo.TablespaceMap {
@@ -335,15 +375,15 @@ func (bbo BaseBackupOptions) sql() string {
 
 // BaseBackupTablespace represents a tablespace in the backup
 type BaseBackupTablespace struct {
-	OID int32
+	OID      int32
 	Location string
-	Size int8
+	Size     int8
 }
 
 // BaseBackupResult will hold the return values  of the BaseBackup command
 type BaseBackupResult struct {
-	LSN LSN
-	TimelineID int32
+	LSN         LSN
+	TimelineID  int32
 	Tablespaces []BaseBackupTablespace
 }
 
@@ -467,7 +507,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 }
 
 // NextTablespace consumes some msgs so we are at start of CopyData
-func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error){
+func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error) {
 
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
@@ -622,7 +662,7 @@ func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (cdr *CopyDon
 	if len(result.Rows) > 1 {
 		return cdr, errors.Errorf("expected 0 or 1 result row, got %d", len(result.Rows))
 	}
-	if len(result.Rows) == 0  {
+	if len(result.Rows) == 0 {
 		// This is expected behaviour when client was first to send CopyDone
 		return
 	}
