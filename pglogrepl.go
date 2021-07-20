@@ -318,7 +318,7 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 			// This signals the start of the replication stream.
 			return nil
 		default:
-			return errors.Errorf("unexpected response: %t", msg)
+			return errors.Errorf("unexpected response: %T", msg)
 		}
 	}
 }
