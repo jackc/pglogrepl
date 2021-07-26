@@ -68,6 +68,13 @@ func (m *baseMessage) Type() MessageType {
 	return m.msgType
 }
 
+// SetType sets message type.
+// This method is added to help writing test code in application.
+// The message type is still defined by message data.
+func (m *baseMessage) SetType(t MessageType) {
+	m.msgType = t
+}
+
 // Decode parse src into message struct. The src must contain the complete message starts after
 // the first message type byte.
 func (m *baseMessage) Decode(src []byte) error {
@@ -152,7 +159,7 @@ func (m *BeginMessage) Decode(src []byte) error {
 	low += used
 	m.Xid = binary.BigEndian.Uint32(src[low:])
 
-	m.msgType = MessageTypeBegin
+	m.SetType(MessageTypeBegin)
 
 	return nil
 }
@@ -184,7 +191,7 @@ func (m *CommitMessage) Decode(src []byte) error {
 	low += used
 	m.CommitTime, _ = m.decodeTime(src[low:])
 
-	m.msgType = MessageTypeCommit
+	m.SetType(MessageTypeCommit)
 
 	return nil
 }
@@ -211,7 +218,7 @@ func (m *OriginMessage) Decode(src []byte) error {
 		return m.decodeStringError("OriginMessage", "Name")
 	}
 
-	m.msgType = MessageTypeOrigin
+	m.SetType(MessageTypeOrigin)
 
 	return nil
 }
@@ -288,7 +295,7 @@ func (m *RelationMessage) Decode(src []byte) error {
 		m.Columns = append(m.Columns, column)
 	}
 
-	m.msgType = MessageTypeRelation
+	m.SetType(MessageTypeRelation)
 
 	return nil
 }
@@ -322,7 +329,7 @@ func (m *TypeMessage) Decode(src []byte) error {
 		return m.decodeStringError("TypeMessage", "Name")
 	}
 
-	m.msgType = MessageTypeType
+	m.SetType(MessageTypeType)
 
 	return nil
 }
@@ -427,7 +434,7 @@ func (m *InsertMessage) Decode(src []byte) error {
 		return m.decodeTupleDataError("InsertMessage", "TupleData", err)
 	}
 
-	m.msgType = MessageTypeInsert
+	m.SetType(MessageTypeInsert)
 
 	return nil
 }
@@ -502,7 +509,7 @@ func (m *UpdateMessage) Decode(src []byte) (err error) {
 		return m.invalidTupleTypeError("UpdateMessage", "Tuple", "K/O/N", tupleType)
 	}
 
-	m.msgType = MessageTypeUpdate
+	m.SetType(MessageTypeUpdate)
 
 	return nil
 }
@@ -559,7 +566,7 @@ func (m *DeleteMessage) Decode(src []byte) (err error) {
 		return m.invalidTupleTypeError("DeleteMessage", "OldTupleType", "K/O", m.OldTupleType)
 	}
 
-	m.msgType = MessageTypeDelete
+	m.SetType(MessageTypeDelete)
 
 	return nil
 }
@@ -597,7 +604,7 @@ func (m *TruncateMessage) Decode(src []byte) (err error) {
 		low += used
 	}
 
-	m.msgType = MessageTypeTruncate
+	m.SetType(MessageTypeTruncate)
 
 	return nil
 }
