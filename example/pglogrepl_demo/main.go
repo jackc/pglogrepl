@@ -19,23 +19,25 @@ func main() {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
 	}
 	defer conn.Close(context.Background())
+	
+	result := conn.Exec(context.Background(), "DROP PUBLICATION IF EXISTS pglogrepl_demo;")
+	_, err = result.ReadAll()
+	if err != nil {
+		log.Fatalln("drop publication if exists error", err)
+	}
+
+	result = conn.Exec(context.Background(), "CREATE PUBLICATION pglogrepl_demo FOR ALL TABLES;")
+	_, err = result.ReadAll()
+	if err != nil {
+		log.Fatalln("create publication error", err)
+	}
+	log.Println("create publication pglogrepl_demo")
 
 	var pluginArguments []string
 	if outputPlugin == "pgoutput" {
-		result := conn.Exec(context.Background(), "DROP PUBLICATION IF EXISTS pglogrepl_demo;")
-		_, err := result.ReadAll()
-		if err != nil {
-			log.Fatalln("drop publication if exists error", err)
-		}
-
-		result = conn.Exec(context.Background(), "CREATE PUBLICATION pglogrepl_demo FOR ALL TABLES;")
-		_, err = result.ReadAll()
-		if err != nil {
-			log.Fatalln("create publication error", err)
-		}
-		log.Println("create publication pglogrepl_demo")
-
 		pluginArguments = []string{"proto_version '1'", "publication_names 'pglogrepl_demo'"}
+	} else if outputPlugin == "wal2json" {
+		pluginArguments = []string{"\"pretty-print\" 'true'"}
 	}
 
 	sysident, err := pglogrepl.IdentifySystem(context.Background(), conn)
