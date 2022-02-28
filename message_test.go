@@ -195,6 +195,7 @@ func (s *relationMessageSuite) Test() {
 	relationID := uint32(rand.Int31())
 	namespace := "public"
 	relationName := "table1"
+	noAtttypmod := int32(-1)
 	col1 := "id"         // int8
 	col2 := "name"       // text
 	col3 := "created_at" // timestamptz
@@ -221,7 +222,7 @@ func (s *relationMessageSuite) Test() {
 	off += s.putString(msg[off:], col1)
 	bigEndian.PutUint32(msg[off:], 20) // int8
 	off += 4
-	bigEndian.PutUint32(msg[off:], 0)
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
 	off += 4
 
 	msg[off] = 0
@@ -229,7 +230,7 @@ func (s *relationMessageSuite) Test() {
 	off += s.putString(msg[off:], col2)
 	bigEndian.PutUint32(msg[off:], 25) // text
 	off += 4
-	bigEndian.PutUint32(msg[off:], 0)
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
 	off += 4
 
 	msg[off] = 0
@@ -237,7 +238,7 @@ func (s *relationMessageSuite) Test() {
 	off += s.putString(msg[off:], col3)
 	bigEndian.PutUint32(msg[off:], 1184) // timestamptz
 	off += 4
-	bigEndian.PutUint32(msg[off:], 0)
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
 	off += 4
 
 	m, err := Parse(msg)
@@ -256,19 +257,19 @@ func (s *relationMessageSuite) Test() {
 				Flags:        1,
 				Name:         col1,
 				DataType:     20,
-				TypeModifier: 0,
+				TypeModifier: -1,
 			},
 			{
 				Flags:        0,
 				Name:         col2,
 				DataType:     25,
-				TypeModifier: 0,
+				TypeModifier: -1,
 			},
 			{
 				Flags:        0,
 				Name:         col3,
 				DataType:     1184,
-				TypeModifier: 0,
+				TypeModifier: -1,
 			},
 		},
 	}

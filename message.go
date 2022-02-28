@@ -136,6 +136,11 @@ func (m *baseMessage) decodeUint64(src []byte) (uint64, int) {
 	return binary.BigEndian.Uint64(src), 8
 }
 
+func (m *baseMessage) decodeInt32(src []byte) (int32, int) {
+	asUint32, size := m.decodeUint32(src)
+	return int32(asUint32), size
+}
+
 // BeginMessage is a begin message.
 type BeginMessage struct {
 	baseMessage
@@ -234,7 +239,7 @@ type RelationMessageColumn struct {
 	DataType uint32
 
 	// TypeModifier is type modifier of the column (atttypmod).
-	TypeModifier uint32
+	TypeModifier int32
 }
 
 // RelationMessage is a relation message.
@@ -289,7 +294,7 @@ func (m *RelationMessage) Decode(src []byte) error {
 		column.DataType, used = m.decodeUint32(src[low:])
 		low += used
 
-		column.TypeModifier, used = m.decodeUint32(src[low:])
+		column.TypeModifier, used = m.decodeInt32(src[low:])
 		low += used
 
 		m.Columns = append(m.Columns, column)
