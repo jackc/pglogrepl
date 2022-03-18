@@ -39,14 +39,14 @@ func (t MessageType) String() string {
 // List of types of logical replication messages.
 const (
 	MessageTypeBegin    MessageType = 'B'
-	MessageTypeCommit               = 'C'
-	MessageTypeOrigin               = 'O'
-	MessageTypeRelation             = 'R'
-	MessageTypeType                 = 'Y'
-	MessageTypeInsert               = 'I'
-	MessageTypeUpdate               = 'U'
-	MessageTypeDelete               = 'D'
-	MessageTypeTruncate             = 'T'
+	MessageTypeCommit   MessageType = 'C'
+	MessageTypeOrigin   MessageType = 'O'
+	MessageTypeRelation MessageType = 'R'
+	MessageTypeType     MessageType = 'Y'
+	MessageTypeInsert   MessageType = 'I'
+	MessageTypeUpdate   MessageType = 'U'
+	MessageTypeDelete   MessageType = 'D'
+	MessageTypeTruncate MessageType = 'T'
 )
 
 // Message is a message received from server.
