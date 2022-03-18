@@ -19,7 +19,7 @@ func main() {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
 	}
 	defer conn.Close(context.Background())
-	
+
 	result := conn.Exec(context.Background(), "DROP PUBLICATION IF EXISTS pglogrepl_demo;")
 	_, err = result.ReadAll()
 	if err != nil {
