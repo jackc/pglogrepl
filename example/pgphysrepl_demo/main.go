@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"os"
 	"log"
+	"os"
 	"time"
 
 	"github.com/jackc/pgconn"
@@ -155,4 +155,3 @@ func main() {
 	}
 
 }
-
