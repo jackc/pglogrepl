@@ -341,9 +341,10 @@ func (m *TypeMessage) Decode(src []byte) error {
 
 // List of types of data in a tuple.
 const (
-	TupleDataTypeNull  = uint8('n')
-	TupleDataTypeToast = uint8('u')
-	TupleDataTypeText  = uint8('t')
+	TupleDataTypeNull   = uint8('n')
+	TupleDataTypeToast  = uint8('u')
+	TupleDataTypeText   = uint8('t')
+	TupleDataTypeBinary = uint8('b')
 )
 
 // TupleDataColumn is a column in a TupleData.
@@ -354,6 +355,8 @@ type TupleDataColumn struct {
 	//	 Byte1('u') Identifies unchanged TOASTed value (the actual value is not sent).
 	//	 Or
 	//	 Byte1('t') Identifies the data as text formatted value.
+	//	 Or
+	//	 Byte1('b') Identifies the data as binary value.
 	DataType uint8
 	Length   uint32
 	// Data is th value of the column, in text format. (A future release might support additional formats.) n is the above length.
@@ -390,7 +393,7 @@ func (m *TupleData) Decode(src []byte) (int, error) {
 		low += 1
 
 		switch column.DataType {
-		case TupleDataTypeText:
+		case TupleDataTypeText, TupleDataTypeBinary:
 			column.Length, used = m.decodeUint32(src[low:])
 			low += used
 
