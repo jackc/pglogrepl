@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgtype"
 )
 
 func main() {
@@ -62,6 +63,8 @@ func main() {
 	clientXLogPos := sysident.XLogPos
 	standbyMessageTimeout := time.Second * 10
 	nextStandbyMessageDeadline := time.Now().Add(standbyMessageTimeout)
+	relations := map[uint32]*pglogrepl.RelationMessage{}
+	connInfo := pgtype.NewConnInfo()
 
 	for {
 		if time.Now().After(nextStandbyMessageDeadline) {
@@ -112,8 +115,68 @@ func main() {
 				log.Fatalf("Parse logical replication message: %s", err)
 			}
 			log.Printf("Receive a logical replication message: %s", logicalMsg.Type())
+			switch logicalMsg := logicalMsg.(type) {
+			case *pglogrepl.RelationMessage:
+				relations[logicalMsg.RelationID] = logicalMsg
+
+			case *pglogrepl.BeginMessage:
+				// Indicates the beginning of a group of changes in a transaction. This is only sent for committed transactions. You won't get any events from rolled back transactions.
+
+			case *pglogrepl.CommitMessage:
+
+			case *pglogrepl.InsertMessage:
+				rel, ok := relations[logicalMsg.RelationID]
+				if !ok {
+					log.Fatalf("unknown relation ID %d", logicalMsg.RelationID)
+				}
+				values := map[string]interface{}{}
+				for idx, col := range logicalMsg.Tuple.Columns {
+					colName := rel.Columns[idx].Name
+					switch col.DataType {
+					case 'n': // null
+						values[colName] = nil
+					case 'u': // unchanged toast
+						// This TOAST value was not changed. TOAST values are not stored in the tuple, and logical replication doesn't want to spend a disk read to fetch its value for you.
+					case 't': //text
+						val, err := decodeTextColumnData(connInfo, col.Data, rel.Columns[idx].DataType)
+						if err != nil {
+							log.Fatalf("error decoding column data: %w", err)
+						}
+						values[colName] = val
+					}
+				}
+				log.Printf("INSERT INTO %s.%s: %v", rel.Namespace, rel.RelationName, values)
+
+			case *pglogrepl.UpdateMessage:
+				// ...
+			case *pglogrepl.DeleteMessage:
+				// ...
+			case *pglogrepl.TruncateMessage:
+				// ...
+
+			case *pglogrepl.TypeMessage:
+			case *pglogrepl.OriginMessage:
+			default:
+				log.Printf("Unknown message type in pgoutput stream: %T", logicalMsg)
+			}
 
 			clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
 		}
 	}
+}
+
+func decodeTextColumnData(ci *pgtype.ConnInfo, data []byte, dataType uint32) (interface{}, error) {
+	var decoder pgtype.TextDecoder
+	if dt, ok := ci.DataTypeForOID(dataType); ok {
+		decoder, ok = dt.Value.(pgtype.TextDecoder)
+		if !ok {
+			decoder = &pgtype.GenericText{}
+		}
+	} else {
+		decoder = &pgtype.GenericText{}
+	}
+	if err := decoder.DecodeText(ci, data); err != nil {
+		return nil, err
+	}
+	return decoder.(pgtype.Value).Get(), nil
 }
