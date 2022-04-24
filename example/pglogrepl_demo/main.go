@@ -74,7 +74,7 @@ func main() {
 		}
 
 		ctx, cancel := context.WithDeadline(context.Background(), nextStandbyMessageDeadline)
-		msg, err := conn.ReceiveMessage(ctx)
+		rawMsg, err := conn.ReceiveMessage(ctx)
 		cancel()
 		if err != nil {
 			if pgconn.Timeout(err) {
@@ -83,37 +83,37 @@ func main() {
 			log.Fatalln("ReceiveMessage failed:", err)
 		}
 
-		switch msg := msg.(type) {
-		case *pgproto3.CopyData:
-			switch msg.Data[0] {
-			case pglogrepl.PrimaryKeepaliveMessageByteID:
-				pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
-				if err != nil {
-					log.Fatalln("ParsePrimaryKeepaliveMessage failed:", err)
-				}
-				log.Println("Primary Keepalive Message =>", "ServerWALEnd:", pkm.ServerWALEnd, "ServerTime:", pkm.ServerTime, "ReplyRequested:", pkm.ReplyRequested)
-
-				if pkm.ReplyRequested {
-					nextStandbyMessageDeadline = time.Time{}
-				}
-
-			case pglogrepl.XLogDataByteID:
-				xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
-				if err != nil {
-					log.Fatalln("ParseXLogData failed:", err)
-				}
-				log.Println("XLogData =>", "WALStart", xld.WALStart, "ServerWALEnd", xld.ServerWALEnd, "ServerTime:", xld.ServerTime, "WALData", string(xld.WALData))
-				logicalMsg, err := pglogrepl.Parse(xld.WALData)
-				if err != nil {
-					log.Fatalf("Parse logical replication message: %s", err)
-				}
-				log.Printf("Receive a logical replication message: %s", logicalMsg.Type())
-
-				clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
-			}
-		default:
-			log.Printf("Received unexpected message: %#v\n", msg)
+		msg, ok := rawMsg.(*pgproto3.CopyData)
+		if !ok {
+			log.Printf("Received unexpected message: %T\n", rawMsg)
+			continue
 		}
 
+		switch msg.Data[0] {
+		case pglogrepl.PrimaryKeepaliveMessageByteID:
+			pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
+			if err != nil {
+				log.Fatalln("ParsePrimaryKeepaliveMessage failed:", err)
+			}
+			log.Println("Primary Keepalive Message =>", "ServerWALEnd:", pkm.ServerWALEnd, "ServerTime:", pkm.ServerTime, "ReplyRequested:", pkm.ReplyRequested)
+
+			if pkm.ReplyRequested {
+				nextStandbyMessageDeadline = time.Time{}
+			}
+
+		case pglogrepl.XLogDataByteID:
+			xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
+			if err != nil {
+				log.Fatalln("ParseXLogData failed:", err)
+			}
+			log.Println("XLogData =>", "WALStart", xld.WALStart, "ServerWALEnd", xld.ServerWALEnd, "ServerTime:", xld.ServerTime, "WALData", string(xld.WALData))
+			logicalMsg, err := pglogrepl.Parse(xld.WALData)
+			if err != nil {
+				log.Fatalf("Parse logical replication message: %s", err)
+			}
+			log.Printf("Receive a logical replication message: %s", logicalMsg.Type())
+
+			clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
+		}
 	}
 }
