@@ -145,7 +145,7 @@ func main() {
 					case 't': //text
 						val, err := decodeTextColumnData(connInfo, col.Data, rel.Columns[idx].DataType)
 						if err != nil {
-							log.Fatalf("error decoding column data: %w", err)
+							log.Fatalln("error decoding column data:", err)
 						}
 						values[colName] = val
 					}
