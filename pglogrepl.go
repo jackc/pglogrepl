@@ -444,6 +444,8 @@ func getBaseBackupInfo(ctx context.Context, conn *pgconn.PgConn) (start LSN, tim
 		case *pgproto3.NoticeResponse:
 		case *pgproto3.CommandComplete:
 			return start, timelineID, nil
+		case *pgproto3.ErrorResponse:
+			return start, timelineID, errors.Errorf("error response sev=%q code=%q message=%q detail=%q position=%d", msg.Severity, msg.Code, msg.Message, msg.Detail, msg.Position)
 		default:
 			return start, timelineID, errors.Errorf("unexpected response: %t", msg)
 		}

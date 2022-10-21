@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,8 +337,10 @@ func TestBaseBackup(t *testing.T) {
 	require.NoError(t, err)
 	defer closeConn(t, conn)
 
+	// NOVERIFY_CHECKSUMS is only supported in PG11 and later
+	noVerifyChecksums := !strings.HasPrefix(conn.ParameterStatus("server_version"), "10.")
 	options := pglogrepl.BaseBackupOptions{
-		NoVerifyChecksums: true,
+		NoVerifyChecksums: noVerifyChecksums,
 		Progress:          true,
 		Label:             "pglogrepltest",
 		Fast:              true,
@@ -347,8 +350,8 @@ func TestBaseBackup(t *testing.T) {
 		TablespaceMap:     true,
 	}
 	startRes, err := pglogrepl.StartBaseBackup(context.Background(), conn, options)
-	require.GreaterOrEqual(t, startRes.TimelineID, int32(1))
 	require.NoError(t, err)
+	require.GreaterOrEqual(t, startRes.TimelineID, int32(1))
 
 	//Write the tablespaces
 	for i := 0; i < len(startRes.Tablespaces)+1; i++ {
