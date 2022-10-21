@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -225,11 +224,18 @@ drop table t;
 	}
 
 	rxXLogData := func() pglogrepl.XLogData {
-		msg, err := conn.ReceiveMessage(ctx)
-		require.NoError(t, err)
-		cdMsg, ok := msg.(*pgproto3.CopyData)
-		require.True(t, ok)
-
+		var cdMsg *pgproto3.CopyData
+		// Discard keepalive messages
+		for {
+			msg, err := conn.ReceiveMessage(ctx)
+			require.NoError(t, err)
+			var ok bool
+			cdMsg, ok = msg.(*pgproto3.CopyData)
+			require.True(t, ok)
+			if cdMsg.Data[0] != pglogrepl.PrimaryKeepaliveMessageByteID {
+				break
+			}
+		}
 		require.Equal(t, byte(pglogrepl.XLogDataByteID), cdMsg.Data[0])
 		xld, err := pglogrepl.ParseXLogData(cdMsg.Data[1:])
 		require.NoError(t, err)
@@ -337,10 +343,8 @@ func TestBaseBackup(t *testing.T) {
 	require.NoError(t, err)
 	defer closeConn(t, conn)
 
-	// NOVERIFY_CHECKSUMS is only supported in PG11 and later
-	noVerifyChecksums := !strings.HasPrefix(conn.ParameterStatus("server_version"), "10.")
 	options := pglogrepl.BaseBackupOptions{
-		NoVerifyChecksums: noVerifyChecksums,
+		NoVerifyChecksums: true,
 		Progress:          true,
 		Label:             "pglogrepltest",
 		Fast:              true,

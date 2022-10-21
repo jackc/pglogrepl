@@ -344,8 +344,8 @@ type BaseBackupOptions struct {
 	NoVerifyChecksums bool
 }
 
-func (bbo BaseBackupOptions) sql() string {
-	parts := []string{"BASE_BACKUP"}
+func (bbo BaseBackupOptions) sql(serverVersion int) string {
+	parts := []string{}
 	if bbo.Label != "" {
 		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''")+"'")
 	}
@@ -353,13 +353,21 @@ func (bbo BaseBackupOptions) sql() string {
 		parts = append(parts, "PROGRESS")
 	}
 	if bbo.Fast {
-		parts = append(parts, "FAST")
+		if serverVersion >= 15 {
+			parts = append(parts, "CHECKPOINT 'fast'")
+		} else {
+			parts = append(parts, "FAST")
+		}
 	}
 	if bbo.WAL {
 		parts = append(parts, "WAL")
 	}
 	if bbo.NoWait {
-		parts = append(parts, "NOWAIT")
+		if serverVersion >= 15 {
+			parts = append(parts, "WAIT false")
+		} else {
+			parts = append(parts, "NOWAIT")
+		}
 	}
 	if bbo.MaxRate >= 32 {
 		parts = append(parts, fmt.Sprintf("MAX_RATE %d", bbo.MaxRate))
@@ -368,9 +376,16 @@ func (bbo BaseBackupOptions) sql() string {
 		parts = append(parts, "TABLESPACE_MAP")
 	}
 	if bbo.NoVerifyChecksums {
-		parts = append(parts, "NOVERIFY_CHECKSUMS")
+		if serverVersion >= 15 {
+			parts = append(parts, "VERIFY_CHECKSUMS false")
+		} else if serverVersion >= 11 {
+			parts = append(parts, "NOVERIFY_CHECKSUMS")
+		}
 	}
-	return strings.Join(parts, " ")
+	if serverVersion >= 15 {
+		return "BASE_BACKUP(" + strings.Join(parts, ", ") + ")"
+	}
+	return "BASE_BACKUP " + strings.Join(parts, " ")
 }
 
 // BaseBackupTablespace represents a tablespace in the backup
@@ -387,9 +402,22 @@ type BaseBackupResult struct {
 	Tablespaces []BaseBackupTablespace
 }
 
+func serverMajorVersion(conn *pgconn.PgConn) (int, error) {
+	verString := conn.ParameterStatus("server_version")
+	dot := strings.IndexByte(verString, '.')
+	if dot == -1 {
+		return 0, errors.Errorf("bad server version string: '%s'", verString)
+	}
+	return strconv.Atoi(verString[:dot])
+}
+
 // StartBaseBackup begins the process for copying a basebackup by executing the BASE_BACKUP command.
 func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBackupOptions) (result BaseBackupResult, err error) {
-	sql := options.sql()
+	serverVersion, err := serverMajorVersion(conn)
+	if err != nil {
+		return result, err
+	}
+	sql := options.sql(serverVersion)
 
 	buf := (&pgproto3.Query{String: sql}).Encode(nil)
 	err = conn.SendBytes(ctx, buf)
