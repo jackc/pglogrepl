@@ -32,6 +32,12 @@ Create a user:
 create user pglogrepl with replication password 'secret';
 ```
 
+If you're using PostgreSQL 15 or newer grant access to the public schema, just for these tests:
+
+```
+grant all on schema public to pglogrepl;
+```
+
 Add a replication line to your pg_hba.conf:
 
 ```
