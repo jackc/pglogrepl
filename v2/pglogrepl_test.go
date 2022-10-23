@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pglogrepl/v2"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -116,15 +116,15 @@ func TestGetHistoryFile(t *testing.T) {
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
 	require.NoError(t, err)
 
-	tlh, err := pglogrepl.TimelineHistory(ctx, conn, 0)
+	_, err = pglogrepl.TimelineHistory(ctx, conn, 0)
 	require.Error(t, err)
 
-	tlh, err = pglogrepl.TimelineHistory(ctx, conn, 1)
+	_, err = pglogrepl.TimelineHistory(ctx, conn, 1)
 	require.Error(t, err)
 
 	if sysident.Timeline > 1 {
 		// This test requires a Postgres with at least 1 timeline increase (promote, or recover)...
-		tlh, err = pglogrepl.TimelineHistory(ctx, conn, sysident.Timeline)
+		tlh, err := pglogrepl.TimelineHistory(ctx, conn, sysident.Timeline)
 		require.NoError(t, err)
 
 		expectedFileName := fmt.Sprintf("%08X.history", sysident.Timeline)

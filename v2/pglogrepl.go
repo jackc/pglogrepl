@@ -1,4 +1,4 @@
-// pglogrepl package implements PostgreSQL logical replication client functionality.
+// Package pglogrepl implements PostgreSQL logical replication client functionality.
 //
 // pglogrepl uses package github.com/jackc/pgconn as its underlying PostgreSQL connection.
 // Use pgconn to establish a connection to PostgreSQL and then use the pglogrepl functions
@@ -92,7 +92,7 @@ func (lsn LSN) Value() (driver.Value, error) {
 	return driver.Value(lsn.String()), nil
 }
 
-// Parse the given XXX/XXX text format LSN used by PostgreSQL.
+// ParseLSN parses the given XXX/XXX text format LSN used by PostgreSQL.
 func ParseLSN(s string) (LSN, error) {
 	var upperHalf uint64
 	var lowerHalf uint64
@@ -295,7 +295,7 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 			sql += fmt.Sprintf("(%s)", strings.Join(options.PluginArgs, ", "))
 		}
 	} else {
-		sql += fmt.Sprintf("%s", timelineString)
+		sql += timelineString
 	}
 
 	buf := (&pgproto3.Query{String: sql}).Encode(nil)
@@ -345,7 +345,7 @@ type BaseBackupOptions struct {
 }
 
 func (bbo BaseBackupOptions) sql(serverVersion int) string {
-	parts := []string{}
+	var parts []string
 	if bbo.Label != "" {
 		parts = append(parts, "LABEL '"+strings.ReplaceAll(bbo.Label, "'", "''")+"'")
 	}
@@ -536,7 +536,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 	}
 }
 
-// NextTablespace consumes some msgs so we are at start of CopyData
+// NextTableSpace consumes some msgs so we are at start of CopyData
 func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error) {
 
 	for {
@@ -574,7 +574,7 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 	if err != nil {
 		return result, err
 	}
-	_, err = SendStandbyCopyDone(context.Background(), conn)
+	_, err = SendStandbyCopyDone(context.Background(), conn) // FIXME(wttw): Why is this error ignored?
 	return result, nil
 }
 
@@ -716,7 +716,7 @@ const microsecFromUnixEpochToY2K = 946684800 * 1000000
 
 func pgTimeToTime(microsecSinceY2K int64) time.Time {
 	microsecSinceUnixEpoch := microsecFromUnixEpochToY2K + microsecSinceY2K
-	return time.Unix(0, (microsecSinceUnixEpoch * 1000))
+	return time.Unix(0, microsecSinceUnixEpoch*1000)
 }
 
 func timeToPgTime(t time.Time) int64 {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -88,7 +87,7 @@ func main() {
 		}
 
 		if errMsg, ok := rawMsg.(*pgproto3.ErrorResponse); ok {
-			return fmt.Errorf("received Postgres WAL error: %+v", errMsg)
+			log.Fatalf("received Postgres WAL error: %+v", errMsg)
 		}
 
 		msg, ok := rawMsg.(*pgproto3.CopyData)
