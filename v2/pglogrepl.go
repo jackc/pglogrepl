@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgio"
-	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgproto3"
 	errors "golang.org/x/xerrors"
 )
 
@@ -298,8 +298,8 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 		sql += timelineString
 	}
 
-	buf := (&pgproto3.Query{String: sql}).Encode(nil)
-	err := conn.SendBytes(ctx, buf)
+	conn.Frontend().SendQuery(&pgproto3.Query{String: sql})
+	err := conn.Frontend().Flush()
 	if err != nil {
 		return errors.Errorf("failed to send START_REPLICATION: %w", err)
 	}
@@ -419,8 +419,8 @@ func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBacku
 	}
 	sql := options.sql(serverVersion)
 
-	buf := (&pgproto3.Query{String: sql}).Encode(nil)
-	err = conn.SendBytes(ctx, buf)
+	conn.Frontend().SendQuery(&pgproto3.Query{String: sql})
+	err = conn.Frontend().Flush()
 	if err != nil {
 		return result, errors.Errorf("failed to send BASE_BACKUP: %w", err)
 	}
@@ -574,8 +574,8 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 	if err != nil {
 		return result, err
 	}
-	_, err = SendStandbyCopyDone(context.Background(), conn) // FIXME(wttw): Why is this error ignored?
-	return result, nil
+	_, err = SendStandbyCopyDone(context.Background(), conn)
+	return result, err
 }
 
 type PrimaryKeepaliveMessage struct {
@@ -634,7 +634,7 @@ type StandbyStatusUpdate struct {
 // The only required field in ssu is WALWritePosition. If WALFlushPosition is 0 then WALWritePosition will be assigned
 // to it. If WALApplyPosition is 0 then WALWritePosition will be assigned to it. If ClientTime is the zero value then
 // the current time will be assigned to it.
-func SendStandbyStatusUpdate(ctx context.Context, conn *pgconn.PgConn, ssu StandbyStatusUpdate) error {
+func SendStandbyStatusUpdate(_ context.Context, conn *pgconn.PgConn, ssu StandbyStatusUpdate) error {
 	if ssu.WALFlushPosition == 0 {
 		ssu.WALFlushPosition = ssu.WALWritePosition
 	}
@@ -660,7 +660,7 @@ func SendStandbyStatusUpdate(ctx context.Context, conn *pgconn.PgConn, ssu Stand
 	cd := &pgproto3.CopyData{Data: data}
 	buf := cd.Encode(nil)
 
-	return conn.SendBytes(ctx, buf)
+	return conn.Frontend().SendUnbufferedEncodedCopyData(buf)
 }
 
 // CopyDoneResult is the parsed result as returned by the server after the client
@@ -672,44 +672,47 @@ type CopyDoneResult struct {
 
 // SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
 // to confirm ending the copy-both mode.
-func SendStandbyCopyDone(ctx context.Context, conn *pgconn.PgConn) (cdr *CopyDoneResult, err error) {
-	cd := &pgproto3.CopyDone{}
-	buf := cd.Encode(nil)
-	err = conn.SendBytes(ctx, buf)
+func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneResult, err error) {
+	// I am suspicious that this is wildly wrong, but I'm pretty sure the previous
+	// V1 code was wildly wrong too -- wttw <steve@blighty.com>
+	conn.Frontend().Send(&pgproto3.CopyDone{})
+	err = conn.Frontend().Flush()
 	if err != nil {
 		return
 	}
-	mrr := conn.ReceiveResults(ctx)
-	results, err := mrr.ReadAll()
 
-	if len(results) != 2 {
-		// Server returned a CopyDone, so client ended copy-both first.
-		// Not at end of timeline, and server will not send a CopyDoneResult
-		return cdr, errors.Errorf("expected 1 result set, got %d", len(results))
+	for {
+		var msg pgproto3.BackendMessage
+		msg, err = conn.Frontend().Receive()
+		if err != nil {
+			return cdr, err
+		}
+		fmt.Printf("in standbycopydone, msg = %#v\n", msg)
+		switch m := msg.(type) {
+		case *pgproto3.CopyDone:
+		case *pgproto3.ParameterStatus, *pgproto3.NoticeResponse:
+		case *pgproto3.CommandComplete:
+		case *pgproto3.RowDescription:
+		case *pgproto3.DataRow:
+			// We are expecting just one row returned, with two columns timeline and LSN
+			// We should pay attention to RowDescription, but we'll take it on trust.
+			if len(m.Values) == 2 {
+				timeline, lerr := strconv.Atoi(string(m.Values[0][0]))
+				if lerr == nil {
+					lsn, lerr := ParseLSN(string(m.Values[0][1]))
+					if lerr == nil {
+						cdr.Timeline = int32(timeline)
+						cdr.LSN = lsn
+					}
+				}
+			}
+		case *pgproto3.EmptyQueryResponse:
+		case *pgproto3.ErrorResponse:
+			return cdr, pgconn.ErrorResponseToPgError(m)
+		case *pgproto3.ReadyForQuery:
+			return cdr, err
+		}
 	}
-
-	result := results[0]
-	if len(result.Rows) > 1 {
-		return cdr, errors.Errorf("expected 0 or 1 result row, got %d", len(result.Rows))
-	}
-	if len(result.Rows) == 0 {
-		// This is expected behaviour when client was first to send CopyDone
-		return
-	}
-
-	row := result.Rows[0]
-	if len(row) != 2 {
-		return cdr, errors.Errorf("expected 2 result columns, got %d", len(row))
-	}
-
-	timeline, err := strconv.Atoi(string(row[0]))
-	if err != nil {
-		return cdr, err
-	}
-	cdr = &CopyDoneResult{}
-	cdr.Timeline = int32(timeline)
-	cdr.LSN, err = ParseLSN(string(row[1]))
-	return cdr, err
 }
 
 const microsecFromUnixEpochToY2K = 946684800 * 1000000
