@@ -1,8 +1,8 @@
 # pglogrepl_demo
 
 `pglogrepl_demo` is a simple demo that connects to a database and logs all messages sent over logical replication. It
-connects to the database specified by the environment variable `PGLOGREPL_DEMO_CONN_STRING`. The connection must have
-replication privileges.
+connects to the database specified by the environment variable `PGLOGREPL_DEMO_CONN_STRING`. The connection must be
+a superuser (because the publication is created `ON ALL TABLES`)
 
 ## Example Usage
 
@@ -15,7 +15,7 @@ $ PGLOGREPL_DEMO_CONN_STRING="postgres://pglogrepl:secret@127.0.0.1/pglogrepl?re
 Start a `psql` connection in another terminal and run the following:
 
 ```
-pglogrepl@127.0.0.1:5432 pglogrepl=# create table t (id int, name text);
+pglogrepl@127.0.0.1:5432 pglogrepl=# create table t (id int primary key, name text);
 CREATE TABLE
 pglogrepl@127.0.0.1:5432 pglogrepl=# insert into t values(1, 'foo');
 INSERT 0 1

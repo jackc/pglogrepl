@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pglogrepl"
-	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pglogrepl/v2"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgproto3"
 )
 
 const slotName = "pglogrepl_demo"

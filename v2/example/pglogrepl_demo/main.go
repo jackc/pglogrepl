@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"log"
 	"os"
 	"time"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pglogrepl"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgtype"
+	"github.com/jackc/pglogrepl/v2"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func main() {
@@ -64,7 +65,7 @@ func main() {
 	standbyMessageTimeout := time.Second * 10
 	nextStandbyMessageDeadline := time.Now().Add(standbyMessageTimeout)
 	relations := map[uint32]*pglogrepl.RelationMessage{}
-	connInfo := pgtype.NewConnInfo()
+	typeMap := pgtype.NewMap()
 
 	for {
 		if time.Now().After(nextStandbyMessageDeadline) {
@@ -113,7 +114,7 @@ func main() {
 			if err != nil {
 				log.Fatalln("ParseXLogData failed:", err)
 			}
-			log.Println("XLogData =>", "WALStart", xld.WALStart, "ServerWALEnd", xld.ServerWALEnd, "ServerTime:", xld.ServerTime, "WALData", string(xld.WALData))
+			log.Printf("XLogData => WALStart %s ServerWALEnd %s ServerTime %s WALData:\n%s\n", xld.WALStart, xld.ServerWALEnd, xld.ServerTime, hex.Dump(xld.WALData))
 			logicalMsg, err := pglogrepl.Parse(xld.WALData)
 			if err != nil {
 				log.Fatalf("Parse logical replication message: %s", err)
@@ -142,7 +143,7 @@ func main() {
 					case 'u': // unchanged toast
 						// This TOAST value was not changed. TOAST values are not stored in the tuple, and logical replication doesn't want to spend a disk read to fetch its value for you.
 					case 't': //text
-						val, err := decodeTextColumnData(connInfo, col.Data, rel.Columns[idx].DataType)
+						val, err := decodeTextColumnData(typeMap, col.Data, rel.Columns[idx].DataType)
 						if err != nil {
 							log.Fatalln("error decoding column data:", err)
 						}
@@ -169,18 +170,9 @@ func main() {
 	}
 }
 
-func decodeTextColumnData(ci *pgtype.ConnInfo, data []byte, dataType uint32) (interface{}, error) {
-	var decoder pgtype.TextDecoder
-	if dt, ok := ci.DataTypeForOID(dataType); ok {
-		decoder, ok = dt.Value.(pgtype.TextDecoder)
-		if !ok {
-			decoder = &pgtype.GenericText{}
-		}
-	} else {
-		decoder = &pgtype.GenericText{}
+func decodeTextColumnData(mi *pgtype.Map, data []byte, dataType uint32) (interface{}, error) {
+	if dt, ok := mi.TypeForOID(dataType); ok {
+		return dt.Codec.DecodeValue(mi, dataType, pgtype.TextFormatCode, data)
 	}
-	if err := decoder.DecodeText(ci, data); err != nil {
-		return nil, err
-	}
-	return decoder.(pgtype.Value).Get(), nil
+	return string(data), nil
 }
