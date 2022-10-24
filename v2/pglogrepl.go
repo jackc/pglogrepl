@@ -686,7 +686,7 @@ func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneR
 		if err != nil {
 			return cdr, err
 		}
-		fmt.Printf("in standbycopydone, msg = %#v\n", msg)
+
 		switch m := msg.(type) {
 		case *pgproto3.CopyDone:
 		case *pgproto3.ParameterStatus, *pgproto3.NoticeResponse:
@@ -709,6 +709,7 @@ func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneR
 		case *pgproto3.ErrorResponse:
 			return cdr, pgconn.ErrorResponseToPgError(m)
 		case *pgproto3.ReadyForQuery:
+			// Should we eat the ReadyForQuery here, or not?
 			return cdr, err
 		}
 	}
