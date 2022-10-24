@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgio"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
-	errors "golang.org/x/xerrors"
 )
 
 const (
@@ -81,7 +80,7 @@ func (lsn *LSN) Scan(src interface{}) error {
 			return err
 		}
 	default:
-		return errors.Errorf("can not scan %T to LSN", src)
+		return fmt.Errorf("can not scan %T to LSN", src)
 	}
 
 	return nil
@@ -99,11 +98,11 @@ func ParseLSN(s string) (LSN, error) {
 	var nparsed int
 	nparsed, err := fmt.Sscanf(s, "%X/%X", &upperHalf, &lowerHalf)
 	if err != nil {
-		return 0, errors.Errorf("failed to parse LSN: %w", err)
+		return 0, fmt.Errorf("failed to parse LSN: %w", err)
 	}
 
 	if nparsed != 2 {
-		return 0, errors.Errorf("failed to parsed LSN: %s", s)
+		return 0, fmt.Errorf("failed to parsed LSN: %s", s)
 	}
 
 	return LSN((upperHalf << 32) + lowerHalf), nil
@@ -131,29 +130,29 @@ func ParseIdentifySystem(mrr *pgconn.MultiResultReader) (IdentifySystemResult, e
 	}
 
 	if len(results) != 1 {
-		return isr, errors.Errorf("expected 1 result set, got %d", len(results))
+		return isr, fmt.Errorf("expected 1 result set, got %d", len(results))
 	}
 
 	result := results[0]
 	if len(result.Rows) != 1 {
-		return isr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+		return isr, fmt.Errorf("expected 1 result row, got %d", len(result.Rows))
 	}
 
 	row := result.Rows[0]
 	if len(row) != 4 {
-		return isr, errors.Errorf("expected 4 result columns, got %d", len(row))
+		return isr, fmt.Errorf("expected 4 result columns, got %d", len(row))
 	}
 
 	isr.SystemID = string(row[0])
 	timeline, err := strconv.ParseInt(string(row[1]), 10, 32)
 	if err != nil {
-		return isr, errors.Errorf("failed to parse timeline: %w", err)
+		return isr, fmt.Errorf("failed to parse timeline: %w", err)
 	}
 	isr.Timeline = int32(timeline)
 
 	isr.XLogPos, err = ParseLSN(string(row[2]))
 	if err != nil {
-		return isr, errors.Errorf("failed to parse xlogpos as LSN: %w", err)
+		return isr, fmt.Errorf("failed to parse xlogpos as LSN: %w", err)
 	}
 
 	isr.DBName = string(row[3])
@@ -182,17 +181,17 @@ func ParseTimelineHistory(mrr *pgconn.MultiResultReader) (TimelineHistoryResult,
 	}
 
 	if len(results) != 1 {
-		return thr, errors.Errorf("expected 1 result set, got %d", len(results))
+		return thr, fmt.Errorf("expected 1 result set, got %d", len(results))
 	}
 
 	result := results[0]
 	if len(result.Rows) != 1 {
-		return thr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+		return thr, fmt.Errorf("expected 1 result row, got %d", len(result.Rows))
 	}
 
 	row := result.Rows[0]
 	if len(row) != 2 {
-		return thr, errors.Errorf("expected 2 result columns, got %d", len(row))
+		return thr, fmt.Errorf("expected 2 result columns, got %d", len(row))
 	}
 
 	thr.FileName = string(row[0])
@@ -239,17 +238,17 @@ func ParseCreateReplicationSlot(mrr *pgconn.MultiResultReader) (CreateReplicatio
 	}
 
 	if len(results) != 1 {
-		return crsr, errors.Errorf("expected 1 result set, got %d", len(results))
+		return crsr, fmt.Errorf("expected 1 result set, got %d", len(results))
 	}
 
 	result := results[0]
 	if len(result.Rows) != 1 {
-		return crsr, errors.Errorf("expected 1 result row, got %d", len(result.Rows))
+		return crsr, fmt.Errorf("expected 1 result row, got %d", len(result.Rows))
 	}
 
 	row := result.Rows[0]
 	if len(row) != 4 {
-		return crsr, errors.Errorf("expected 4 result columns, got %d", len(row))
+		return crsr, fmt.Errorf("expected 4 result columns, got %d", len(row))
 	}
 
 	crsr.SlotName = string(row[0])
@@ -301,13 +300,13 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 	conn.Frontend().SendQuery(&pgproto3.Query{String: sql})
 	err := conn.Frontend().Flush()
 	if err != nil {
-		return errors.Errorf("failed to send START_REPLICATION: %w", err)
+		return fmt.Errorf("failed to send START_REPLICATION: %w", err)
 	}
 
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			return errors.Errorf("failed to receive message: %w", err)
+			return fmt.Errorf("failed to receive message: %w", err)
 		}
 
 		switch msg := msg.(type) {
@@ -318,7 +317,7 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 			// This signals the start of the replication stream.
 			return nil
 		default:
-			return errors.Errorf("unexpected response: %t", msg)
+			return fmt.Errorf("unexpected response: %t", msg)
 		}
 	}
 }
@@ -406,7 +405,7 @@ func serverMajorVersion(conn *pgconn.PgConn) (int, error) {
 	verString := conn.ParameterStatus("server_version")
 	dot := strings.IndexByte(verString, '.')
 	if dot == -1 {
-		return 0, errors.Errorf("bad server version string: '%s'", verString)
+		return 0, fmt.Errorf("bad server version string: '%s'", verString)
 	}
 	return strconv.Atoi(verString[:dot])
 }
@@ -422,7 +421,7 @@ func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBacku
 	conn.Frontend().SendQuery(&pgproto3.Query{String: sql})
 	err = conn.Frontend().Flush()
 	if err != nil {
-		return result, errors.Errorf("failed to send BASE_BACKUP: %w", err)
+		return result, fmt.Errorf("failed to send BASE_BACKUP: %w", err)
 	}
 	// From here Postgres returns result sets, but pgconn has no infrastructure to properly capture them.
 	// So we capture data low level with sub functions, before we return from this function when we get to the CopyData part.
@@ -439,43 +438,43 @@ func getBaseBackupInfo(ctx context.Context, conn *pgconn.PgConn) (start LSN, tim
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			return start, timelineID, errors.Errorf("failed to receive message: %w", err)
+			return start, timelineID, fmt.Errorf("failed to receive message: %w", err)
 		}
 		switch msg := msg.(type) {
 		case *pgproto3.RowDescription:
 			if len(msg.Fields) != 2 {
-				return start, timelineID, errors.Errorf("expected 2 column headers, received: %d", len(msg.Fields))
+				return start, timelineID, fmt.Errorf("expected 2 column headers, received: %d", len(msg.Fields))
 			}
 			colName := string(msg.Fields[0].Name)
 			if colName != "recptr" {
-				return start, timelineID, errors.Errorf("unexpected col name for recptr col: %s", colName)
+				return start, timelineID, fmt.Errorf("unexpected col name for recptr col: %s", colName)
 			}
 			colName = string(msg.Fields[1].Name)
 			if colName != "tli" {
-				return start, timelineID, errors.Errorf("unexpected col name for tli col: %s", colName)
+				return start, timelineID, fmt.Errorf("unexpected col name for tli col: %s", colName)
 			}
 		case *pgproto3.DataRow:
 			if len(msg.Values) != 2 {
-				return start, timelineID, errors.Errorf("expected 2 columns, received: %d", len(msg.Values))
+				return start, timelineID, fmt.Errorf("expected 2 columns, received: %d", len(msg.Values))
 			}
 			colData := string(msg.Values[0])
 			start, err = ParseLSN(colData)
 			if err != nil {
-				return start, timelineID, errors.Errorf("cannot convert result to LSN: %s", colData)
+				return start, timelineID, fmt.Errorf("cannot convert result to LSN: %s", colData)
 			}
 			colData = string(msg.Values[1])
 			tli, err := strconv.Atoi(colData)
 			if err != nil {
-				return start, timelineID, errors.Errorf("cannot convert timelineID to int: %s", colData)
+				return start, timelineID, fmt.Errorf("cannot convert timelineID to int: %s", colData)
 			}
 			timelineID = int32(tli)
 		case *pgproto3.NoticeResponse:
 		case *pgproto3.CommandComplete:
 			return start, timelineID, nil
 		case *pgproto3.ErrorResponse:
-			return start, timelineID, errors.Errorf("error response sev=%q code=%q message=%q detail=%q position=%d", msg.Severity, msg.Code, msg.Message, msg.Detail, msg.Position)
+			return start, timelineID, fmt.Errorf("error response sev=%q code=%q message=%q detail=%q position=%d", msg.Severity, msg.Code, msg.Message, msg.Detail, msg.Position)
 		default:
-			return start, timelineID, errors.Errorf("unexpected response: %t", msg)
+			return start, timelineID, fmt.Errorf("unexpected response: %t", msg)
 		}
 	}
 }
@@ -485,28 +484,28 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			return tbss, errors.Errorf("failed to receive message: %w", err)
+			return tbss, fmt.Errorf("failed to receive message: %w", err)
 		}
 		switch msg := msg.(type) {
 		case *pgproto3.RowDescription:
 			if len(msg.Fields) != 3 {
-				return tbss, errors.Errorf("expected 3 column headers, received: %d", len(msg.Fields))
+				return tbss, fmt.Errorf("expected 3 column headers, received: %d", len(msg.Fields))
 			}
 			colName := string(msg.Fields[0].Name)
 			if colName != "spcoid" {
-				return tbss, errors.Errorf("unexpected col name for spcoid col: %s", colName)
+				return tbss, fmt.Errorf("unexpected col name for spcoid col: %s", colName)
 			}
 			colName = string(msg.Fields[1].Name)
 			if colName != "spclocation" {
-				return tbss, errors.Errorf("unexpected col name for spclocation col: %s", colName)
+				return tbss, fmt.Errorf("unexpected col name for spclocation col: %s", colName)
 			}
 			colName = string(msg.Fields[2].Name)
 			if colName != "size" {
-				return tbss, errors.Errorf("unexpected col name for size col: %s", colName)
+				return tbss, fmt.Errorf("unexpected col name for size col: %s", colName)
 			}
 		case *pgproto3.DataRow:
 			if len(msg.Values) != 3 {
-				return tbss, errors.Errorf("expected 3 columns, received: %d", len(msg.Values))
+				return tbss, fmt.Errorf("expected 3 columns, received: %d", len(msg.Values))
 			}
 			if msg.Values[0] == nil {
 				continue
@@ -515,7 +514,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 			colData := string(msg.Values[0])
 			OID, err := strconv.Atoi(colData)
 			if err != nil {
-				return tbss, errors.Errorf("cannot convert spcoid to int: %s", colData)
+				return tbss, fmt.Errorf("cannot convert spcoid to int: %s", colData)
 			}
 			tbs.OID = int32(OID)
 			tbs.Location = string(msg.Values[1])
@@ -523,7 +522,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 				colData := string(msg.Values[2])
 				size, err := strconv.Atoi(colData)
 				if err != nil {
-					return tbss, errors.Errorf("cannot convert size to int: %s", colData)
+					return tbss, fmt.Errorf("cannot convert size to int: %s", colData)
 				}
 				tbs.Size = int8(size)
 			}
@@ -531,7 +530,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 		case *pgproto3.CommandComplete:
 			return tbss, nil
 		default:
-			return tbss, errors.Errorf("unexpected response: %t", msg)
+			return tbss, fmt.Errorf("unexpected response: %t", msg)
 		}
 	}
 }
@@ -542,7 +541,7 @@ func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error) {
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			return errors.Errorf("failed to receive message: %w", err)
+			return fmt.Errorf("failed to receive message: %w", err)
 		}
 
 		switch msg := msg.(type) {
@@ -556,7 +555,7 @@ func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error) {
 		case *pgproto3.RowDescription:
 
 		default:
-			return errors.Errorf("unexpected response: %t", msg)
+			return fmt.Errorf("unexpected response: %t", msg)
 		}
 	}
 }
@@ -588,7 +587,7 @@ type PrimaryKeepaliveMessage struct {
 func ParsePrimaryKeepaliveMessage(buf []byte) (PrimaryKeepaliveMessage, error) {
 	var pkm PrimaryKeepaliveMessage
 	if len(buf) != 17 {
-		return pkm, errors.Errorf("PrimaryKeepaliveMessage must be 17 bytes, got %d", len(buf))
+		return pkm, fmt.Errorf("PrimaryKeepaliveMessage must be 17 bytes, got %d", len(buf))
 	}
 
 	pkm.ServerWALEnd = LSN(binary.BigEndian.Uint64(buf))
@@ -609,7 +608,7 @@ type XLogData struct {
 func ParseXLogData(buf []byte) (XLogData, error) {
 	var xld XLogData
 	if len(buf) < 24 {
-		return xld, errors.Errorf("XLogData must be at least 24 bytes, got %d", len(buf))
+		return xld, fmt.Errorf("XLogData must be at least 24 bytes, got %d", len(buf))
 	}
 
 	xld.WALStart = LSN(binary.BigEndian.Uint64(buf))
