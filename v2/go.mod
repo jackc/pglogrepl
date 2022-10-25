@@ -8,4 +8,3 @@ require (
 	github.com/stretchr/testify v1.8.0
 )
 
-replace github.com/jackc/pglogrepl/v2 => /Users/steve/dev/pglogrepl/v2
