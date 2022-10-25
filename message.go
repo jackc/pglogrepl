@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// MessageType indicates type of a logical replication message.
+// MessageType indicates the type of a logical replication message.
 type MessageType uint8
 
 func (t MessageType) String() string {
@@ -54,7 +54,7 @@ type Message interface {
 	Type() MessageType
 }
 
-// MessageDecoder decodes meessage into struct.
+// MessageDecoder decodes message into struct.
 type MessageDecoder interface {
 	Decode([]byte) error
 }
@@ -77,7 +77,7 @@ func (m *baseMessage) SetType(t MessageType) {
 
 // Decode parse src into message struct. The src must contain the complete message starts after
 // the first message type byte.
-func (m *baseMessage) Decode(src []byte) error {
+func (m *baseMessage) Decode(_ []byte) error {
 	return fmt.Errorf("message decode not implemented")
 }
 
@@ -101,9 +101,10 @@ func (m *baseMessage) invalidTupleTypeError(name, field string, e string, a byte
 //
 // String type definition: https://www.postgresql.org/docs/current/protocol-message-types.html
 // String(s)
-//   A null-terminated string (C-style string). There is no specific length limitation on strings.
-//   If s is specified it is the exact value that will appear, otherwise the value is variable.
-//   Eg. String, String("user").
+//
+//	A null-terminated string (C-style string). There is no specific length limitation on strings.
+//	If s is specified it is the exact value that will appear, otherwise the value is variable.
+//	Eg. String, String("user").
 //
 // If there is no null byte in src, return -1.
 func (m *baseMessage) decodeString(src []byte) (string, int) {
@@ -130,10 +131,6 @@ func (m *baseMessage) decodeUint16(src []byte) (uint16, int) {
 
 func (m *baseMessage) decodeUint32(src []byte) (uint32, int) {
 	return binary.BigEndian.Uint32(src), 4
-}
-
-func (m *baseMessage) decodeUint64(src []byte) (uint64, int) {
-	return binary.BigEndian.Uint64(src), 8
 }
 
 func (m *baseMessage) decodeInt32(src []byte) (int32, int) {
@@ -201,7 +198,7 @@ func (m *CommitMessage) Decode(src []byte) error {
 	return nil
 }
 
-// OriginMessage is a origin message.
+// OriginMessage is an origin message.
 type OriginMessage struct {
 	baseMessage
 	// CommitLSN is the LSN of the commit on the origin server.
@@ -230,7 +227,7 @@ func (m *OriginMessage) Decode(src []byte) error {
 
 // RelationMessageColumn is one column in a RelationMessage.
 type RelationMessageColumn struct {
-	// Flags for the column. Currently can be either 0 for no flags or 1 which marks the column as part of the key.
+	// Flags for the column. Currently, it can be either 0 for no flags or 1 which marks the column as part of the key.
 	Flags uint8
 
 	Name string
@@ -275,7 +272,7 @@ func (m *RelationMessage) Decode(src []byte) error {
 	}
 	low += used
 
-	m.ReplicaIdentity = uint8(src[low])
+	m.ReplicaIdentity = src[low]
 	low++
 
 	m.ColumnNum, used = m.decodeUint16(src[low:])
@@ -283,7 +280,7 @@ func (m *RelationMessage) Decode(src []byte) error {
 
 	for i := 0; i < int(m.ColumnNum); i++ {
 		column := new(RelationMessageColumn)
-		column.Flags = uint8(src[low])
+		column.Flags = src[low]
 		low++
 		column.Name, used = m.decodeString(src[low:])
 		if used < 0 {
@@ -349,7 +346,7 @@ const (
 
 // TupleDataColumn is a column in a TupleData.
 type TupleDataColumn struct {
-	// DataType indicates the how does the data is stored.
+	// DataType indicates how the data is stored.
 	//	 Byte1('n') Identifies the data as NULL value.
 	//	 Or
 	//	 Byte1('u') Identifies unchanged TOASTed value (the actual value is not sent).
@@ -389,7 +386,7 @@ func (m *TupleData) Decode(src []byte) (int, error) {
 
 	for i := 0; i < int(m.ColumnNum); i++ {
 		column := new(TupleDataColumn)
-		column.DataType = uint8(src[low])
+		column.DataType = src[low]
 		low += 1
 
 		switch column.DataType {
@@ -430,7 +427,7 @@ func (m *InsertMessage) Decode(src []byte) error {
 	m.RelationID, used = m.decodeUint32(src)
 	low += used
 
-	tupleType := uint8(src[low])
+	tupleType := src[low]
 	low += 1
 	if tupleType != 'N' {
 		return m.invalidTupleTypeError("InsertMessage", "TupleType", "N", tupleType)
@@ -492,7 +489,7 @@ func (m *UpdateMessage) Decode(src []byte) (err error) {
 	m.RelationID, used = m.decodeUint32(src)
 	low += used
 
-	tupleType := uint8(src[low])
+	tupleType := src[low]
 	low++
 
 	switch tupleType {
@@ -504,7 +501,6 @@ func (m *UpdateMessage) Decode(src []byte) (err error) {
 			return m.decodeTupleDataError("UpdateMessage", "OldTuple", err)
 		}
 		low += used
-		tupleType = uint8(src[low])
 		low++
 		fallthrough
 	case UpdateMessageTupleTypeNew:
@@ -539,7 +535,7 @@ type DeleteMessage struct {
 	//     as REPLICA IDENTITY.
 	//
 	//   Byte1('O')
-	//     Identifies the following TupleData message as a old tuple.
+	//     Identifies the following TupleData message as an old tuple.
 	//     This field is present if the table in which the delete has happened has
 	//     REPLICA IDENTITY set to FULL.
 	//
@@ -560,7 +556,7 @@ func (m *DeleteMessage) Decode(src []byte) (err error) {
 	m.RelationID, used = m.decodeUint32(src)
 	low += used
 
-	m.OldTupleType = uint8(src[low])
+	m.OldTupleType = src[low]
 	low++
 
 	switch m.OldTupleType {
@@ -603,7 +599,7 @@ func (m *TruncateMessage) Decode(src []byte) (err error) {
 	m.RelationNum, used = m.decodeUint32(src)
 	low += used
 
-	m.Option = uint8(src[low])
+	m.Option = src[low]
 	low++
 
 	m.RelationIDs = make([]uint32, m.RelationNum)
@@ -617,7 +613,7 @@ func (m *TruncateMessage) Decode(src []byte) (err error) {
 	return nil
 }
 
-// Parse parse a logical replicaton message.
+// Parse parse a logical replication message.
 func Parse(data []byte) (m Message, err error) {
 	var decoder MessageDecoder
 	msgType := MessageType(data[0])

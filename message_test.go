@@ -51,7 +51,7 @@ func (s *messageSuite) newRelationID() uint32 {
 }
 
 func (s *messageSuite) putString(dst []byte, value string) int {
-	copy(dst, []byte(value))
+	copy(dst, value)
 	dst[len(value)] = byte(0)
 	return len(value) + 1
 }
