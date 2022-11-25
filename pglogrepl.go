@@ -317,7 +317,7 @@ func StartReplication(ctx context.Context, conn *pgconn.PgConn, slotName string,
 			// This signals the start of the replication stream.
 			return nil
 		default:
-			return fmt.Errorf("unexpected response: %t", msg)
+			return fmt.Errorf("unexpected response type: %T", msg)
 		}
 	}
 }
@@ -474,7 +474,7 @@ func getBaseBackupInfo(ctx context.Context, conn *pgconn.PgConn) (start LSN, tim
 		case *pgproto3.ErrorResponse:
 			return start, timelineID, fmt.Errorf("error response sev=%q code=%q message=%q detail=%q position=%d", msg.Severity, msg.Code, msg.Message, msg.Detail, msg.Position)
 		default:
-			return start, timelineID, fmt.Errorf("unexpected response: %t", msg)
+			return start, timelineID, fmt.Errorf("unexpected response type: %T", msg)
 		}
 	}
 }
@@ -530,7 +530,7 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 		case *pgproto3.CommandComplete:
 			return tbss, nil
 		default:
-			return tbss, fmt.Errorf("unexpected response: %t", msg)
+			return tbss, fmt.Errorf("unexpected response type: %T", msg)
 		}
 	}
 }
@@ -555,7 +555,7 @@ func NextTableSpace(ctx context.Context, conn *pgconn.PgConn) (err error) {
 		case *pgproto3.RowDescription:
 
 		default:
-			return fmt.Errorf("unexpected response: %t", msg)
+			return fmt.Errorf("unexpected response type: %T", msg)
 		}
 	}
 }
