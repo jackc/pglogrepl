@@ -696,9 +696,9 @@ func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneR
 			// We are expecting just one row returned, with two columns timeline and LSN
 			// We should pay attention to RowDescription, but we'll take it on trust.
 			if len(m.Values) == 2 {
-				timeline, lerr := strconv.Atoi(string(m.Values[0][0]))
+				timeline, lerr := strconv.Atoi(string(m.Values[0]))
 				if lerr == nil {
-					lsn, lerr := ParseLSN(string(m.Values[0][1]))
+					lsn, lerr := ParseLSN(string(m.Values[1]))
 					if lerr == nil {
 						cdr.Timeline = int32(timeline)
 						cdr.LSN = lsn
