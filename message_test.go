@@ -724,3 +724,52 @@ func (s *truncateMessageSuite) Test() {
 	expected.msgType = 'T'
 	s.Equal(expected, truncateMsg)
 }
+
+func TestLogicalDecodingMessageSuite(t *testing.T) {
+	suite.Run(t, new(logicalDecodingMessageSuite))
+}
+
+type logicalDecodingMessageSuite struct {
+	messageSuite
+}
+
+func (s *logicalDecodingMessageSuite) Test() {
+	msg := make([]byte, 1+1+8+5+4+5)
+	msg[0] = 'M'
+	off := 1
+
+	// transaction flag
+	msg[1] = 1
+	off += 1
+
+	lsn := s.newLSN()
+	bigEndian.PutUint64(msg[off:], uint64(lsn))
+	off += 8
+
+	off += s.putString(msg[off:], "test")
+
+	content := "hello"
+
+	bigEndian.PutUint32(msg[off:], uint32(len(content)))
+	off += 4
+
+	for i := 0; i < len(content); i++ {
+		msg[off] = content[i]
+		off++
+	}
+
+	expected := &LogicalDecodingMessage{
+		Transactional: true,
+		LSN:           lsn,
+		Prefix:        "test",
+		Content:       []byte("hello"),
+	}
+	expected.msgType = MessageTypeMessage
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	logicalDecodingMsg, ok := m.(*LogicalDecodingMessage)
+	s.True(ok)
+
+	s.Equal(expected, logicalDecodingMsg)
+}
