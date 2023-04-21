@@ -37,7 +37,7 @@ func main() {
 
 	var pluginArguments []string
 	if outputPlugin == "pgoutput" {
-		pluginArguments = []string{"proto_version '1'", "publication_names 'pglogrepl_demo'"}
+		pluginArguments = []string{"proto_version '1'", "publication_names 'pglogrepl_demo'", "messages 'true'"}
 	} else if outputPlugin == "wal2json" {
 		pluginArguments = []string{"\"pretty-print\" 'true'"}
 	}
@@ -161,6 +161,8 @@ func main() {
 
 			case *pglogrepl.TypeMessage:
 			case *pglogrepl.OriginMessage:
+			case *pglogrepl.LogicalDecodingMessage:
+				log.Printf("Logical decoding message: %q, %q", logicalMsg.Prefix, logicalMsg.Content)
 			default:
 				log.Printf("Unknown message type in pgoutput stream: %T", logicalMsg)
 			}

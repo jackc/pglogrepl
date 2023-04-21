@@ -15,6 +15,8 @@ func (t MessageType) String() string {
 	switch t {
 	case MessageTypeBegin:
 		return "Begin"
+	case MessageTypeMessage:
+		return "Message"
 	case MessageTypeCommit:
 		return "Commit"
 	case MessageTypeOrigin:
@@ -39,6 +41,7 @@ func (t MessageType) String() string {
 // List of types of logical replication messages.
 const (
 	MessageTypeBegin    MessageType = 'B'
+	MessageTypeMessage  MessageType = 'M'
 	MessageTypeCommit   MessageType = 'C'
 	MessageTypeOrigin   MessageType = 'O'
 	MessageTypeRelation MessageType = 'R'
@@ -613,6 +616,44 @@ func (m *TruncateMessage) Decode(src []byte) (err error) {
 	return nil
 }
 
+// LogicalDecodingMessage is a logical decoding message.
+type LogicalDecodingMessage struct {
+	baseMessage
+
+	LSN           LSN
+	Transactional bool
+	Prefix        string
+	Content       []byte
+}
+
+// Decode decodes a message from src.
+func (m *LogicalDecodingMessage) Decode(src []byte) (err error) {
+	if len(src) < 14 {
+		return m.lengthError("LogicalDecodingMessage", 14, len(src))
+	}
+
+	var low, used int
+
+	flags := src[low]
+	m.Transactional = flags == 1
+	low++
+
+	m.LSN, used = m.decodeLSN(src[low:])
+	low += used
+
+	m.Prefix, used = m.decodeString(src[low:])
+	low += used
+
+	contentLength, used := m.decodeUint32(src[low:])
+	low += used
+
+	m.Content = src[low : low+int(contentLength)]
+
+	m.SetType(MessageTypeMessage)
+
+	return nil
+}
+
 // Parse parse a logical replication message.
 func Parse(data []byte) (m Message, err error) {
 	var decoder MessageDecoder
@@ -620,6 +661,8 @@ func Parse(data []byte) (m Message, err error) {
 	switch msgType {
 	case MessageTypeBegin:
 		decoder = new(BeginMessage)
+	case MessageTypeMessage:
+		decoder = new(LogicalDecodingMessage)
 	case MessageTypeCommit:
 		decoder = new(CommitMessage)
 	case MessageTypeOrigin:
