@@ -1,4 +1,4 @@
-module github.com/jackc/pglogrepl
+module github.com/getoutreach/pglogrepl
 
 go 1.14
 
