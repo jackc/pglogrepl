@@ -51,3 +51,14 @@ You should see output like the following from the `pglogrepl_demo` process.
 2019/08/22 20:05:15 Sent Standby status message
 2019/08/22 20:05:15 Primary Keepalive Message => ServerWALEnd: 3/A6693FF8 ServerTime: 2019-08-22 20:05:15.378933 -0500 CDT ReplyRequested: false
 ```
+
+## Notes on streaming
+
+Postgres since version 14 supports streaming large in-progress transactions via replication protocol.
+These transactions are now supported with StreamXXXMessage.
+To use this feature at least protocol version 2 must be used and 'streaming' parameter should be set to 'true' for 'pgoutput' plugin.
+
+Exactly when PG starts to stream transaction is determined by "logical_decoding_work_mem" configuration parameter.
+For testing purposes it can be set to the minimum value (64kB). Min value is not recommended for production use. 
+
+At the moment wal2json plugin doesn't support streaming.

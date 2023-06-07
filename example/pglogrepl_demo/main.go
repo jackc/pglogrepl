@@ -37,7 +37,19 @@ func main() {
 
 	var pluginArguments []string
 	if outputPlugin == "pgoutput" {
-		pluginArguments = []string{"proto_version '1'", "publication_names 'pglogrepl_demo'", "messages 'true'"}
+		// streaming of large transactions is available since PG 14 (protocol version 2)
+		// we also need to set 'streaming' to 'true'
+		//pluginArguments = []string{
+		//	"proto_version '2'",
+		//	"publication_names 'pglogrepl_demo'",
+		//	"messages 'true'",
+		//	"streaming 'true'",
+		//}
+		pluginArguments = []string{
+			"proto_version '1'",
+			"publication_names 'pglogrepl_demo'",
+			"messages 'true'",
+		}
 	} else if outputPlugin == "wal2json" {
 		pluginArguments = []string{"\"pretty-print\" 'true'"}
 	}
@@ -165,6 +177,14 @@ func main() {
 			case *pglogrepl.LogicalDecodingMessage:
 				log.Printf("Logical decoding message: %q, %q", logicalMsg.Prefix, logicalMsg.Content)
 
+			case *pglogrepl.StreamStartMessage:
+				log.Printf("Stream start message: xid %d, first segment? %d", logicalMsg.Xid, logicalMsg.FirstSegment)
+			case *pglogrepl.StreamStopMessage:
+				log.Printf("Stream stop message")
+			case *pglogrepl.StreamCommitMessage:
+				log.Printf("Stream commit message: xid %d", logicalMsg.Xid)
+			case *pglogrepl.StreamAbortMessage:
+				log.Printf("Stream abort message: xid %d", logicalMsg.Xid)
 			default:
 				log.Printf("Unknown message type in pgoutput stream: %T", logicalMsg)
 			}
