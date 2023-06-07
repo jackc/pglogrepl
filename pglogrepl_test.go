@@ -359,7 +359,7 @@ func TestBaseBackup(t *testing.T) {
 
 	//Write the tablespaces
 	for i := 0; i < len(startRes.Tablespaces)+1; i++ {
-		f, err := os.Create(fmt.Sprintf("/tmp/pglogrepl_test_tbs_%d.tar", i))
+		f, err := os.CreateTemp("", fmt.Sprintf("pglogrepl_test_tbs_%d.tar", i))
 		require.NoError(t, err)
 		err = pglogrepl.NextTableSpace(context.Background(), conn)
 		var message pgproto3.BackendMessage

@@ -2,6 +2,8 @@ package pglogrepl
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -772,4 +774,140 @@ func (s *logicalDecodingMessageSuite) Test() {
 	s.True(ok)
 
 	s.Equal(expected, logicalDecodingMsg)
+}
+
+func (s *messageSuite) assertV1NotSupported(msg []byte) {
+	_, err := Parse(msg)
+	s.Error(err)
+	s.True(errors.Is(err, errMsgNotSupported))
+}
+
+func TestStreamStartSuite(t *testing.T) {
+	suite.Run(t, new(streamStartSuite))
+}
+
+type streamStartSuite struct {
+	messageSuite
+}
+
+func (s *streamStartSuite) Test() {
+	msg := make([]byte, 1+4+1)
+	msg[0] = 'S'
+	xid := s.newXid()
+	firstSeg := byte(1)
+	bigEndian.PutUint32(msg[1:], xid)
+	msg[5] = firstSeg
+
+	expected := &StreamStartMessage{
+		Xid:          xid,
+		FirstSegment: firstSeg,
+	}
+	expected.msgType = MessageTypeStreamStart
+	s.assertV1NotSupported(msg)
+
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	startMsg, ok := m.(*StreamStartMessage)
+	s.True(ok)
+
+	s.Equal(expected, startMsg)
+}
+
+func TestStreamStopSuite(t *testing.T) {
+	suite.Run(t, new(streamStopSuite))
+}
+
+type streamStopSuite struct {
+	messageSuite
+}
+
+func (s *streamStopSuite) Test() {
+	msg := make([]byte, 1)
+	msg[0] = 'E'
+
+	expected := &StreamStopMessage{}
+	expected.msgType = MessageTypeStreamStop
+
+	s.assertV1NotSupported(msg)
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	stopMsg, ok := m.(*StreamStopMessage)
+	s.True(ok)
+
+	s.Equal(expected, stopMsg)
+}
+
+func TestStreamCommitSuite(t *testing.T) {
+	suite.Run(t, new(streamCommitSuite))
+}
+
+type streamCommitSuite struct {
+	messageSuite
+}
+
+func (s *streamCommitSuite) Test() {
+	msg := make([]byte, 1+4+1+8+8+8)
+	xid := s.newXid()
+	flags := uint8(0)
+	commitLSN := s.newLSN()
+	transactionEndLSN := s.newLSN()
+	commitTime, pgCommitTime := s.newTime()
+
+	msg[0] = 'c'
+	bigEndian.PutUint32(msg[1:], xid)
+	fmt.Printf("%+v\n", msg)
+	msg[5] = flags
+	bigEndian.PutUint64(msg[6:], uint64(commitLSN))
+	bigEndian.PutUint64(msg[14:], uint64(transactionEndLSN))
+	bigEndian.PutUint64(msg[22:], pgCommitTime)
+
+	expected := &StreamCommitMessage{
+		Xid:               xid,
+		Flags:             flags,
+		CommitLSN:         commitLSN,
+		TransactionEndLSN: transactionEndLSN,
+		CommitTime:        commitTime,
+	}
+	expected.msgType = MessageTypeStreamCommit
+
+	s.assertV1NotSupported(msg)
+
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	streamCommitMsg, ok := m.(*StreamCommitMessage)
+	s.True(ok)
+	s.Equal(expected, streamCommitMsg)
+}
+
+func TestStreamAbortSuite(t *testing.T) {
+	suite.Run(t, new(streamAbortSuite))
+}
+
+type streamAbortSuite struct {
+	messageSuite
+}
+
+func (s *streamAbortSuite) Test() {
+	msg := make([]byte, 1+4+4)
+
+	xid := s.newXid()
+	subXid := s.newXid()
+
+	msg[0] = 'A'
+	bigEndian.PutUint32(msg[1:], xid)
+	bigEndian.PutUint32(msg[5:], subXid)
+
+	expected := &StreamAbortMessage{
+		Xid:    xid,
+		SubXid: subXid,
+	}
+	expected.msgType = MessageTypeStreamAbort
+
+	s.assertV1NotSupported(msg)
+
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	streamAbortMsg, ok := m.(*StreamAbortMessage)
+	s.True(ok)
+	s.Equal(expected, streamAbortMsg)
 }
