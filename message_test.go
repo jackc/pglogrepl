@@ -2,8 +2,6 @@ package pglogrepl
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -194,6 +192,18 @@ type relationMessageSuite struct {
 }
 
 func (s *relationMessageSuite) Test() {
+
+	msg, expected := s.createRelationTestData()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	relationMsg, ok := m.(*RelationMessage)
+	s.True(ok)
+
+	s.Equal(expected, relationMsg)
+}
+
+func (s *messageSuite) createRelationTestData() ([]byte, *RelationMessage) {
 	relationID := uint32(rand.Int31())
 	namespace := "public"
 	relationName := "table1"
@@ -243,11 +253,6 @@ func (s *relationMessageSuite) Test() {
 	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
 	off += 4
 
-	m, err := Parse(msg)
-	s.NoError(err)
-	relationMsg, ok := m.(*RelationMessage)
-	s.True(ok)
-
 	expected := &RelationMessage{
 		RelationID:      relationID,
 		Namespace:       namespace,
@@ -276,7 +281,8 @@ func (s *relationMessageSuite) Test() {
 		},
 	}
 	expected.msgType = 'R'
-	s.Equal(expected, relationMsg)
+
+	return msg, expected
 }
 
 func TestTypeMessageSuite(t *testing.T) {
@@ -288,6 +294,17 @@ type typeMessageSuite struct {
 }
 
 func (s *typeMessageSuite) Test() {
+	msg, expected := s.createTypeTestData()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	typeMsg, ok := m.(*TypeMessage)
+	s.True(ok)
+
+	s.Equal(expected, typeMsg)
+}
+
+func (s *messageSuite) createTypeTestData() ([]byte, *TypeMessage) {
 	dataType := uint32(1184) // timestamptz
 	namespace := "public"
 	name := "created_at"
@@ -300,18 +317,14 @@ func (s *typeMessageSuite) Test() {
 	off += s.putString(msg[off:], namespace)
 	s.putString(msg[off:], name)
 
-	m, err := Parse(msg)
-	s.NoError(err)
-	typeMsg, ok := m.(*TypeMessage)
-	s.True(ok)
-
 	expected := &TypeMessage{
 		DataType:  dataType,
 		Namespace: namespace,
 		Name:      name,
 	}
 	expected.msgType = 'Y'
-	s.Equal(expected, typeMsg)
+
+	return msg, expected
 }
 
 func TestInsertMessageSuite(t *testing.T) {
@@ -323,6 +336,18 @@ type insertMessageSuite struct {
 }
 
 func (s *insertMessageSuite) Test() {
+
+	msg, expected := s.createInsertTestData()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	insertMsg, ok := m.(*InsertMessage)
+	s.True(ok)
+
+	s.Equal(expected, insertMsg)
+}
+
+func (s *messageSuite) createInsertTestData() ([]byte, *InsertMessage) {
 	relationID := s.newRelationID()
 
 	col1Data := []byte("1")
@@ -348,11 +373,6 @@ func (s *insertMessageSuite) Test() {
 	off += s.putTupleColumn(msg[off:], 't', col3Data)
 	off += s.putTupleColumn(msg[off:], 'n', nil)
 	s.putTupleColumn(msg[off:], 'u', nil)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	insertMsg, ok := m.(*InsertMessage)
-	s.True(ok)
 
 	expected := &InsertMessage{
 		RelationID: relationID,
@@ -384,7 +404,8 @@ func (s *insertMessageSuite) Test() {
 		},
 	}
 	expected.msgType = 'I'
-	s.Equal(expected, insertMsg)
+
+	return msg, expected
 }
 
 func TestUpdateMessageSuite(t *testing.T) {
@@ -396,6 +417,16 @@ type updateMessageSuite struct {
 }
 
 func (s *updateMessageSuite) TestWithOldTupleTypeK() {
+	msg, expected := s.createUpdateTestDataTypeK()
+	m, err := Parse(msg)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessage)
+	s.True(ok)
+
+	s.Equal(expected, updateMsg)
+}
+
+func (s *messageSuite) createUpdateTestDataTypeK() ([]byte, *UpdateMessage) {
 	relationID := s.newRelationID()
 
 	oldCol1Data := []byte("123") // like an id
@@ -424,12 +455,6 @@ func (s *updateMessageSuite) TestWithOldTupleTypeK() {
 	off += 2
 	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
 	s.putTupleColumn(msg[off:], 't', newCol2Data)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	updateMsg, ok := m.(*UpdateMessage)
-	s.True(ok)
-
 	expected := &UpdateMessage{
 		RelationID:   relationID,
 		OldTupleType: UpdateMessageTupleTypeKey,
@@ -460,10 +485,21 @@ func (s *updateMessageSuite) TestWithOldTupleTypeK() {
 		},
 	}
 	expected.msgType = 'U'
-	s.Equal(expected, updateMsg)
+
+	return msg, expected
 }
 
 func (s *updateMessageSuite) TestWithOldTupleTypeO() {
+	msg, expected := s.createUpdateTestDataTypeO()
+	m, err := Parse(msg)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessage)
+	s.True(ok)
+
+	s.Equal(expected, updateMsg)
+}
+
+func (s *messageSuite) createUpdateTestDataTypeO() ([]byte, *UpdateMessage) {
 	relationID := s.newRelationID()
 
 	oldCol1Data := []byte("123") // like an id
@@ -495,12 +531,6 @@ func (s *updateMessageSuite) TestWithOldTupleTypeO() {
 	off += 2
 	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
 	s.putTupleColumn(msg[off:], 't', newCol2Data)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	updateMsg, ok := m.(*UpdateMessage)
-	s.True(ok)
-
 	expected := &UpdateMessage{
 		RelationID:   relationID,
 		OldTupleType: UpdateMessageTupleTypeOld,
@@ -536,10 +566,21 @@ func (s *updateMessageSuite) TestWithOldTupleTypeO() {
 		},
 	}
 	expected.msgType = 'U'
-	s.Equal(expected, updateMsg)
+
+	return msg, expected
 }
 
 func (s *updateMessageSuite) TestWithoutOldTuple() {
+	msg, expected := s.createUpdateTestDataWithoutOldTuple()
+	m, err := Parse(msg)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessage)
+	s.True(ok)
+
+	s.Equal(expected, updateMsg)
+}
+
+func (s *messageSuite) createUpdateTestDataWithoutOldTuple() ([]byte, *UpdateMessage) {
 	relationID := s.newRelationID()
 
 	newCol1Data := []byte("1124")
@@ -559,12 +600,6 @@ func (s *updateMessageSuite) TestWithoutOldTuple() {
 	off += 2
 	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
 	s.putTupleColumn(msg[off:], 't', newCol2Data)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	updateMsg, ok := m.(*UpdateMessage)
-	s.True(ok)
-
 	expected := &UpdateMessage{
 		RelationID:   relationID,
 		OldTupleType: UpdateMessageTupleTypeNone,
@@ -585,7 +620,8 @@ func (s *updateMessageSuite) TestWithoutOldTuple() {
 		},
 	}
 	expected.msgType = 'U'
-	s.Equal(expected, updateMsg)
+
+	return msg, expected
 }
 
 func TestDeleteMessageSuite(t *testing.T) {
@@ -597,6 +633,17 @@ type deleteMessageSuite struct {
 }
 
 func (s *deleteMessageSuite) TestWithOldTupleTypeK() {
+	msg, expected := s.createDeleteTestDataTypeK()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	deleteMsg, ok := m.(*DeleteMessage)
+	s.True(ok)
+
+	s.Equal(expected, deleteMsg)
+}
+
+func (s *messageSuite) createDeleteTestDataTypeK() ([]byte, *DeleteMessage) {
 	relationID := s.newRelationID()
 
 	oldCol1Data := []byte("123") // like an id
@@ -613,12 +660,6 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeK() {
 	bigEndian.PutUint16(msg[off:], 1)
 	off += 2
 	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	deleteMsg, ok := m.(*DeleteMessage)
-	s.True(ok)
-
 	expected := &DeleteMessage{
 		RelationID:   relationID,
 		OldTupleType: DeleteMessageTupleTypeKey,
@@ -634,10 +675,21 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeK() {
 		},
 	}
 	expected.msgType = 'D'
-	s.Equal(expected, deleteMsg)
+	return msg, expected
 }
 
 func (s *deleteMessageSuite) TestWithOldTupleTypeO() {
+	msg, expected := s.createDeleteTestDataTypeO()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	deleteMsg, ok := m.(*DeleteMessage)
+	s.True(ok)
+
+	s.Equal(expected, deleteMsg)
+}
+
+func (s *messageSuite) createDeleteTestDataTypeO() ([]byte, *DeleteMessage) {
 	relationID := s.newRelationID()
 
 	oldCol1Data := []byte("123") // like an id
@@ -657,12 +709,6 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeO() {
 	off += 2
 	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
 	off += s.putTupleColumn(msg[off:], 't', oldCol2Data)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	deleteMsg, ok := m.(*DeleteMessage)
-	s.True(ok)
-
 	expected := &DeleteMessage{
 		RelationID:   relationID,
 		OldTupleType: DeleteMessageTupleTypeOld,
@@ -683,7 +729,7 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeO() {
 		},
 	}
 	expected.msgType = 'D'
-	s.Equal(expected, deleteMsg)
+	return msg, expected
 }
 
 func TestTruncateMessageSuite(t *testing.T) {
@@ -695,6 +741,17 @@ type truncateMessageSuite struct {
 }
 
 func (s *truncateMessageSuite) Test() {
+	msg, expected := s.createTruncateTestData()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	truncateMsg, ok := m.(*TruncateMessage)
+	s.True(ok)
+
+	s.Equal(expected, truncateMsg)
+}
+
+func (s *messageSuite) createTruncateTestData() ([]byte, *TruncateMessage) {
 	relationID1 := s.newRelationID()
 	relationID2 := s.newRelationID()
 	option := uint8(0x01 | 0x02)
@@ -709,12 +766,6 @@ func (s *truncateMessageSuite) Test() {
 	bigEndian.PutUint32(msg[off:], relationID1)
 	off += 4
 	bigEndian.PutUint32(msg[off:], relationID2)
-
-	m, err := Parse(msg)
-	s.NoError(err)
-	truncateMsg, ok := m.(*TruncateMessage)
-	s.True(ok)
-
 	expected := &TruncateMessage{
 		RelationNum: 2,
 		Option:      TruncateOptionCascade | TruncateOptionRestartIdentity,
@@ -724,7 +775,7 @@ func (s *truncateMessageSuite) Test() {
 		},
 	}
 	expected.msgType = 'T'
-	s.Equal(expected, truncateMsg)
+	return msg, expected
 }
 
 func TestLogicalDecodingMessageSuite(t *testing.T) {
@@ -738,34 +789,9 @@ type logicalDecodingMessageSuite struct {
 func (s *logicalDecodingMessageSuite) Test() {
 	msg := make([]byte, 1+1+8+5+4+5)
 	msg[0] = 'M'
-	off := 1
 
-	// transaction flag
-	msg[1] = 1
-	off += 1
+	expected := putMessageTestData(msg[1:], &s.messageSuite)
 
-	lsn := s.newLSN()
-	bigEndian.PutUint64(msg[off:], uint64(lsn))
-	off += 8
-
-	off += s.putString(msg[off:], "test")
-
-	content := "hello"
-
-	bigEndian.PutUint32(msg[off:], uint32(len(content)))
-	off += 4
-
-	for i := 0; i < len(content); i++ {
-		msg[off] = content[i]
-		off++
-	}
-
-	expected := &LogicalDecodingMessage{
-		Transactional: true,
-		LSN:           lsn,
-		Prefix:        "test",
-		Content:       []byte("hello"),
-	}
 	expected.msgType = MessageTypeMessage
 
 	m, err := Parse(msg)
@@ -774,140 +800,4 @@ func (s *logicalDecodingMessageSuite) Test() {
 	s.True(ok)
 
 	s.Equal(expected, logicalDecodingMsg)
-}
-
-func (s *messageSuite) assertV1NotSupported(msg []byte) {
-	_, err := Parse(msg)
-	s.Error(err)
-	s.True(errors.Is(err, errMsgNotSupported))
-}
-
-func TestStreamStartSuite(t *testing.T) {
-	suite.Run(t, new(streamStartSuite))
-}
-
-type streamStartSuite struct {
-	messageSuite
-}
-
-func (s *streamStartSuite) Test() {
-	msg := make([]byte, 1+4+1)
-	msg[0] = 'S'
-	xid := s.newXid()
-	firstSeg := byte(1)
-	bigEndian.PutUint32(msg[1:], xid)
-	msg[5] = firstSeg
-
-	expected := &StreamStartMessage{
-		Xid:          xid,
-		FirstSegment: firstSeg,
-	}
-	expected.msgType = MessageTypeStreamStart
-	s.assertV1NotSupported(msg)
-
-	m, err := ParseV2(msg, false)
-	s.NoError(err)
-	startMsg, ok := m.(*StreamStartMessage)
-	s.True(ok)
-
-	s.Equal(expected, startMsg)
-}
-
-func TestStreamStopSuite(t *testing.T) {
-	suite.Run(t, new(streamStopSuite))
-}
-
-type streamStopSuite struct {
-	messageSuite
-}
-
-func (s *streamStopSuite) Test() {
-	msg := make([]byte, 1)
-	msg[0] = 'E'
-
-	expected := &StreamStopMessage{}
-	expected.msgType = MessageTypeStreamStop
-
-	s.assertV1NotSupported(msg)
-	m, err := ParseV2(msg, false)
-	s.NoError(err)
-	stopMsg, ok := m.(*StreamStopMessage)
-	s.True(ok)
-
-	s.Equal(expected, stopMsg)
-}
-
-func TestStreamCommitSuite(t *testing.T) {
-	suite.Run(t, new(streamCommitSuite))
-}
-
-type streamCommitSuite struct {
-	messageSuite
-}
-
-func (s *streamCommitSuite) Test() {
-	msg := make([]byte, 1+4+1+8+8+8)
-	xid := s.newXid()
-	flags := uint8(0)
-	commitLSN := s.newLSN()
-	transactionEndLSN := s.newLSN()
-	commitTime, pgCommitTime := s.newTime()
-
-	msg[0] = 'c'
-	bigEndian.PutUint32(msg[1:], xid)
-	fmt.Printf("%+v\n", msg)
-	msg[5] = flags
-	bigEndian.PutUint64(msg[6:], uint64(commitLSN))
-	bigEndian.PutUint64(msg[14:], uint64(transactionEndLSN))
-	bigEndian.PutUint64(msg[22:], pgCommitTime)
-
-	expected := &StreamCommitMessage{
-		Xid:               xid,
-		Flags:             flags,
-		CommitLSN:         commitLSN,
-		TransactionEndLSN: transactionEndLSN,
-		CommitTime:        commitTime,
-	}
-	expected.msgType = MessageTypeStreamCommit
-
-	s.assertV1NotSupported(msg)
-
-	m, err := ParseV2(msg, false)
-	s.NoError(err)
-	streamCommitMsg, ok := m.(*StreamCommitMessage)
-	s.True(ok)
-	s.Equal(expected, streamCommitMsg)
-}
-
-func TestStreamAbortSuite(t *testing.T) {
-	suite.Run(t, new(streamAbortSuite))
-}
-
-type streamAbortSuite struct {
-	messageSuite
-}
-
-func (s *streamAbortSuite) Test() {
-	msg := make([]byte, 1+4+4)
-
-	xid := s.newXid()
-	subXid := s.newXid()
-
-	msg[0] = 'A'
-	bigEndian.PutUint32(msg[1:], xid)
-	bigEndian.PutUint32(msg[5:], subXid)
-
-	expected := &StreamAbortMessage{
-		Xid:    xid,
-		SubXid: subXid,
-	}
-	expected.msgType = MessageTypeStreamAbort
-
-	s.assertV1NotSupported(msg)
-
-	m, err := ParseV2(msg, false)
-	s.NoError(err)
-	streamAbortMsg, ok := m.(*StreamAbortMessage)
-	s.True(ok)
-	s.Equal(expected, streamAbortMsg)
 }

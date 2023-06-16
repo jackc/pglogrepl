@@ -671,122 +671,6 @@ func (m *LogicalDecodingMessage) Decode(src []byte) (err error) {
 	return nil
 }
 
-type StreamStartMessage struct {
-	baseMessage
-
-	Xid uint32
-	// A value of 1 indicates this is the first stream segment for this XID, 0 for any other stream segment
-	FirstSegment uint8
-}
-
-func (m *StreamStartMessage) Decode(src []byte) (err error) {
-	if len(src) < 5 {
-		return m.lengthError("StreamStartMessage", 5, len(src))
-	}
-
-	var low, used int
-	m.Xid, used = m.decodeUint32(src)
-	low += used
-	m.FirstSegment = src[low]
-
-	m.SetType(MessageTypeStreamStart)
-
-	return nil
-}
-
-type StreamStopMessage struct {
-	baseMessage
-}
-
-func (m *StreamStopMessage) Decode(_ []byte) (err error) {
-	// stream stop has no data
-	m.SetType(MessageTypeStreamStop)
-
-	return nil
-}
-
-type StreamCommitMessage struct {
-	baseMessage
-
-	Xid               uint32
-	Flags             uint8 // currently unused
-	CommitLSN         LSN
-	TransactionEndLSN LSN
-	CommitTime        time.Time
-}
-
-func (m *StreamCommitMessage) Decode(src []byte) (err error) {
-	if len(src) < 29 {
-		return m.lengthError("StreamCommitMessage", 29, len(src))
-	}
-	var low, used int
-	m.Xid, used = m.decodeUint32(src)
-	low += used
-	m.Flags = src[low]
-	low += 1
-	m.CommitLSN, used = m.decodeLSN(src[low:])
-	low += used
-	m.TransactionEndLSN, used = m.decodeLSN(src[low:])
-	low += used
-	m.CommitTime, _ = m.decodeTime(src[low:])
-
-	m.SetType(MessageTypeStreamCommit)
-
-	return nil
-}
-
-type StreamAbortMessage struct {
-	baseMessage
-
-	Xid    uint32
-	SubXid uint32
-}
-
-func (m *StreamAbortMessage) Decode(src []byte) (err error) {
-	if len(src) < 8 {
-		return m.lengthError("StreamAbortMessage", 29, len(src))
-	}
-
-	var low, used int
-	m.Xid, used = m.decodeUint32(src)
-	low += used
-	m.SubXid, _ = m.decodeUint32(src[low:])
-
-	m.SetType(MessageTypeStreamAbort)
-
-	return nil
-}
-
-// ParseV2 parse a logical replication message from protocol version #2
-// it accepts a slice of bytes read from PG and inStream parameter
-// inStream must be true when StreamStartMessage has been read
-// it must be false after StreamStopMessage has been read
-func ParseV2(data []byte, inStream bool) (m Message, err error) {
-	var decoder MessageDecoder
-	msgType := MessageType(data[0])
-
-	switch msgType {
-	case MessageTypeStreamStart:
-		decoder = new(StreamStartMessage)
-	case MessageTypeStreamStop:
-		decoder = new(StreamStopMessage)
-	case MessageTypeStreamCommit:
-		decoder = new(StreamCommitMessage)
-	case MessageTypeStreamAbort:
-		decoder = new(StreamAbortMessage)
-	default:
-		decoder = getCommonDecoder(msgType)
-	}
-
-	if decoder != nil {
-		if err = decoder.Decode(data[1:]); err != nil {
-			return nil, err
-		}
-	}
-
-	return decoder.(Message), nil
-}
-
 // Parse parse a logical replication message.
 func Parse(data []byte) (m Message, err error) {
 	var decoder MessageDecoder
@@ -809,12 +693,13 @@ func Parse(data []byte) (m Message, err error) {
 	default:
 		decoder = getCommonDecoder(msgType)
 	}
-	if decoder != nil {
-		if err = decoder.Decode(data[1:]); err != nil {
-			return nil, err
-		}
-	} else {
+
+	if decoder == nil {
 		return nil, errMsgNotSupported
+	}
+
+	if err = decoder.Decode(data[1:]); err != nil {
+		return nil, err
 	}
 
 	return decoder.(Message), nil
