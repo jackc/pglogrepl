@@ -98,7 +98,7 @@ func (m *StreamAbortMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 
 // ParseV2 parse a logical replication message from protocol version #2
 // it accepts a slice of bytes read from PG and inStream parameter
-// inStream must be true when StreamStartMessage has been read
+// inStream must be true when StreamStartMessageV2 has been read
 // it must be false after StreamStopMessageV2 has been read
 func ParseV2(data []byte, inStream bool) (m Message, err error) {
 	var decoder MessageDecoder
