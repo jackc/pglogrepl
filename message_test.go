@@ -2,6 +2,7 @@ package pglogrepl
 
 import (
 	"encoding/binary"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -82,6 +83,499 @@ func (s *messageSuite) putTupleColumn(dst []byte, dataType uint8, data []byte) i
 		s.FailNow("invalid data type of a tuple: %c", dataType)
 		return 0
 	}
+}
+
+func (s *messageSuite) putMessageTestData(msg []byte) *LogicalDecodingMessage {
+	// transaction flag
+	msg[0] = 1
+	off := 1
+
+	lsn := s.newLSN()
+	bigEndian.PutUint64(msg[off:], uint64(lsn))
+	off += 8
+
+	off += s.putString(msg[off:], "test")
+
+	content := "hello"
+
+	bigEndian.PutUint32(msg[off:], uint32(len(content)))
+	off += 4
+
+	for i := 0; i < len(content); i++ {
+		msg[off] = content[i]
+		off++
+	}
+	return &LogicalDecodingMessage{
+		Transactional: true,
+		LSN:           lsn,
+		Prefix:        "test",
+		Content:       []byte("hello"),
+	}
+}
+
+func (s *messageSuite) assertV1NotSupported(msg []byte) {
+	_, err := Parse(msg)
+	s.Error(err)
+	s.True(errors.Is(err, errMsgNotSupported))
+}
+
+func (s *messageSuite) createRelationTestData() ([]byte, *RelationMessage) {
+	relationID := uint32(rand.Int31())
+	namespace := "public"
+	relationName := "table1"
+	noAtttypmod := int32(-1)
+	col1 := "id"         // int8
+	col2 := "name"       // text
+	col3 := "created_at" // timestamptz
+
+	col1Length := 1 + len(col1) + 1 + 4 + 4
+	col2Length := 1 + len(col2) + 1 + 4 + 4
+	col3Length := 1 + len(col3) + 1 + 4 + 4
+
+	msg := make([]byte, 1+4+len(namespace)+1+len(relationName)+1+1+
+		2+col1Length+col2Length+col3Length)
+	msg[0] = 'R'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	off += s.putString(msg[off:], namespace)
+	off += s.putString(msg[off:], relationName)
+	msg[off] = 1
+	off++
+	bigEndian.PutUint16(msg[off:], 3)
+	off += 2
+
+	msg[off] = 1 // column id is key
+	off++
+	off += s.putString(msg[off:], col1)
+	bigEndian.PutUint32(msg[off:], 20) // int8
+	off += 4
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
+	off += 4
+
+	msg[off] = 0
+	off++
+	off += s.putString(msg[off:], col2)
+	bigEndian.PutUint32(msg[off:], 25) // text
+	off += 4
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
+	off += 4
+
+	msg[off] = 0
+	off++
+	off += s.putString(msg[off:], col3)
+	bigEndian.PutUint32(msg[off:], 1184) // timestamptz
+	off += 4
+	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
+	off += 4
+
+	expected := &RelationMessage{
+		RelationID:      relationID,
+		Namespace:       namespace,
+		RelationName:    relationName,
+		ReplicaIdentity: 1,
+		ColumnNum:       3,
+		Columns: []*RelationMessageColumn{
+			{
+				Flags:        1,
+				Name:         col1,
+				DataType:     20,
+				TypeModifier: -1,
+			},
+			{
+				Flags:        0,
+				Name:         col2,
+				DataType:     25,
+				TypeModifier: -1,
+			},
+			{
+				Flags:        0,
+				Name:         col3,
+				DataType:     1184,
+				TypeModifier: -1,
+			},
+		},
+	}
+	expected.msgType = 'R'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createTypeTestData() ([]byte, *TypeMessage) {
+	dataType := uint32(1184) // timestamptz
+	namespace := "public"
+	name := "created_at"
+
+	msg := make([]byte, 1+4+len(namespace)+1+len(name)+1)
+	msg[0] = 'Y'
+	off := 1
+	bigEndian.PutUint32(msg[off:], dataType)
+	off += 4
+	off += s.putString(msg[off:], namespace)
+	s.putString(msg[off:], name)
+
+	expected := &TypeMessage{
+		DataType:  dataType,
+		Namespace: namespace,
+		Name:      name,
+	}
+	expected.msgType = 'Y'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createInsertTestData() ([]byte, *InsertMessage) {
+	relationID := s.newRelationID()
+
+	col1Data := []byte("1")
+	col2Data := []byte("myname")
+	col3Data := []byte("123456789")
+	col1Length := s.tupleColumnLength('t', col1Data)
+	col2Length := s.tupleColumnLength('t', col2Data)
+	col3Length := s.tupleColumnLength('t', col3Data)
+	col4Length := s.tupleColumnLength('n', nil)
+	col5Length := s.tupleColumnLength('u', nil)
+
+	msg := make([]byte, 1+4+1+2+col1Length+col2Length+col3Length+col4Length+col5Length)
+	msg[0] = 'I'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'N'
+	off++
+	bigEndian.PutUint16(msg[off:], 5)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', col1Data)
+	off += s.putTupleColumn(msg[off:], 't', col2Data)
+	off += s.putTupleColumn(msg[off:], 't', col3Data)
+	off += s.putTupleColumn(msg[off:], 'n', nil)
+	s.putTupleColumn(msg[off:], 'u', nil)
+
+	expected := &InsertMessage{
+		RelationID: relationID,
+		Tuple: &TupleData{
+			ColumnNum: 5,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(col1Data)),
+					Data:     col1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(col2Data)),
+					Data:     col2Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(col3Data)),
+					Data:     col3Data,
+				},
+				{
+					DataType: TupleDataTypeNull,
+				},
+				{
+					DataType: TupleDataTypeToast,
+				},
+			},
+		},
+	}
+	expected.msgType = 'I'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createUpdateTestDataTypeK() ([]byte, *UpdateMessage) {
+	relationID := s.newRelationID()
+
+	oldCol1Data := []byte("123") // like an id
+	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
+
+	newCol1Data := []byte("1124")
+	newCol2Data := []byte("myname")
+	newCol1Length := s.tupleColumnLength('t', newCol1Data)
+	newCol2Length := s.tupleColumnLength('t', newCol2Data)
+
+	msg := make([]byte, 1+4+
+		1+2+oldCol1Length+
+		1+2+newCol1Length+newCol2Length)
+	msg[0] = 'U'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'K'
+	off += 1
+	bigEndian.PutUint16(msg[off:], 1)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
+	msg[off] = 'N'
+	off++
+	bigEndian.PutUint16(msg[off:], 2)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
+	s.putTupleColumn(msg[off:], 't', newCol2Data)
+	expected := &UpdateMessage{
+		RelationID:   relationID,
+		OldTupleType: UpdateMessageTupleTypeKey,
+		OldTuple: &TupleData{
+			ColumnNum: 1,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol1Data)),
+					Data:     oldCol1Data,
+				},
+			},
+		},
+		NewTuple: &TupleData{
+			ColumnNum: 2,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol1Data)),
+					Data:     newCol1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol2Data)),
+					Data:     newCol2Data,
+				},
+			},
+		},
+	}
+	expected.msgType = 'U'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createUpdateTestDataTypeO() ([]byte, *UpdateMessage) {
+	relationID := s.newRelationID()
+
+	oldCol1Data := []byte("123") // like an id
+	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
+	oldCol2Data := []byte("myoldname")
+	oldCol2Length := s.tupleColumnLength('t', oldCol2Data)
+
+	newCol1Data := []byte("1124")
+	newCol2Data := []byte("myname")
+	newCol1Length := s.tupleColumnLength('t', newCol1Data)
+	newCol2Length := s.tupleColumnLength('t', newCol2Data)
+
+	msg := make([]byte, 1+4+
+		1+2+oldCol1Length+oldCol2Length+
+		1+2+newCol1Length+newCol2Length)
+	msg[0] = 'U'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'O'
+	off += 1
+	bigEndian.PutUint16(msg[off:], 2)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
+	off += s.putTupleColumn(msg[off:], 't', oldCol2Data)
+	msg[off] = 'N'
+	off++
+	bigEndian.PutUint16(msg[off:], 2)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
+	s.putTupleColumn(msg[off:], 't', newCol2Data)
+	expected := &UpdateMessage{
+		RelationID:   relationID,
+		OldTupleType: UpdateMessageTupleTypeOld,
+		OldTuple: &TupleData{
+			ColumnNum: 2,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol1Data)),
+					Data:     oldCol1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol2Data)),
+					Data:     oldCol2Data,
+				},
+			},
+		},
+		NewTuple: &TupleData{
+			ColumnNum: 2,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol1Data)),
+					Data:     newCol1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol2Data)),
+					Data:     newCol2Data,
+				},
+			},
+		},
+	}
+	expected.msgType = 'U'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createUpdateTestDataWithoutOldTuple() ([]byte, *UpdateMessage) {
+	relationID := s.newRelationID()
+
+	newCol1Data := []byte("1124")
+	newCol2Data := []byte("myname")
+	newCol1Length := s.tupleColumnLength('t', newCol1Data)
+	newCol2Length := s.tupleColumnLength('t', newCol2Data)
+
+	msg := make([]byte, 1+4+
+		1+2+newCol1Length+newCol2Length)
+	msg[0] = 'U'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'N'
+	off++
+	bigEndian.PutUint16(msg[off:], 2)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
+	s.putTupleColumn(msg[off:], 't', newCol2Data)
+	expected := &UpdateMessage{
+		RelationID:   relationID,
+		OldTupleType: UpdateMessageTupleTypeNone,
+		NewTuple: &TupleData{
+			ColumnNum: 2,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol1Data)),
+					Data:     newCol1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(newCol2Data)),
+					Data:     newCol2Data,
+				},
+			},
+		},
+	}
+	expected.msgType = 'U'
+
+	return msg, expected
+}
+
+func (s *messageSuite) createDeleteTestDataTypeK() ([]byte, *DeleteMessage) {
+	relationID := s.newRelationID()
+
+	oldCol1Data := []byte("123") // like an id
+	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
+
+	msg := make([]byte, 1+4+
+		1+2+oldCol1Length)
+	msg[0] = 'D'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'K'
+	off++
+	bigEndian.PutUint16(msg[off:], 1)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
+	expected := &DeleteMessage{
+		RelationID:   relationID,
+		OldTupleType: DeleteMessageTupleTypeKey,
+		OldTuple: &TupleData{
+			ColumnNum: 1,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol1Data)),
+					Data:     oldCol1Data,
+				},
+			},
+		},
+	}
+	expected.msgType = 'D'
+	return msg, expected
+}
+
+func (s *messageSuite) createDeleteTestDataTypeO() ([]byte, *DeleteMessage) {
+	relationID := s.newRelationID()
+
+	oldCol1Data := []byte("123") // like an id
+	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
+	oldCol2Data := []byte("myoldname")
+	oldCol2Length := s.tupleColumnLength('t', oldCol2Data)
+
+	msg := make([]byte, 1+4+
+		1+2+oldCol1Length+oldCol2Length)
+	msg[0] = 'D'
+	off := 1
+	bigEndian.PutUint32(msg[off:], relationID)
+	off += 4
+	msg[off] = 'O'
+	off += 1
+	bigEndian.PutUint16(msg[off:], 2)
+	off += 2
+	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
+	off += s.putTupleColumn(msg[off:], 't', oldCol2Data)
+	expected := &DeleteMessage{
+		RelationID:   relationID,
+		OldTupleType: DeleteMessageTupleTypeOld,
+		OldTuple: &TupleData{
+			ColumnNum: 2,
+			Columns: []*TupleDataColumn{
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol1Data)),
+					Data:     oldCol1Data,
+				},
+				{
+					DataType: TupleDataTypeText,
+					Length:   uint32(len(oldCol2Data)),
+					Data:     oldCol2Data,
+				},
+			},
+		},
+	}
+	expected.msgType = 'D'
+	return msg, expected
+}
+
+func (s *messageSuite) createTruncateTestData() ([]byte, *TruncateMessage) {
+	relationID1 := s.newRelationID()
+	relationID2 := s.newRelationID()
+	option := uint8(0x01 | 0x02)
+
+	msg := make([]byte, 1+4+1+4*2)
+	msg[0] = 'T'
+	off := 1
+	bigEndian.PutUint32(msg[off:], 2)
+	off += 4
+	msg[off] = option
+	off++
+	bigEndian.PutUint32(msg[off:], relationID1)
+	off += 4
+	bigEndian.PutUint32(msg[off:], relationID2)
+	expected := &TruncateMessage{
+		RelationNum: 2,
+		Option:      TruncateOptionCascade | TruncateOptionRestartIdentity,
+		RelationIDs: []uint32{
+			relationID1,
+			relationID2,
+		},
+	}
+	expected.msgType = 'T'
+	return msg, expected
+}
+
+func (s *messageSuite) insertXid(msg []byte) ([]byte, uint32) {
+	msgV2 := make([]byte, 4+len(msg))
+	msgV2[0] = msg[0]
+	xid := s.newXid()
+	bigEndian.PutUint32(msgV2[1:], xid)
+	copy(msgV2[5:], msg[1:])
+
+	return msgV2, xid
 }
 
 func TestBeginMessageSuite(t *testing.T) {
@@ -203,88 +697,6 @@ func (s *relationMessageSuite) Test() {
 	s.Equal(expected, relationMsg)
 }
 
-func (s *messageSuite) createRelationTestData() ([]byte, *RelationMessage) {
-	relationID := uint32(rand.Int31())
-	namespace := "public"
-	relationName := "table1"
-	noAtttypmod := int32(-1)
-	col1 := "id"         // int8
-	col2 := "name"       // text
-	col3 := "created_at" // timestamptz
-
-	col1Length := 1 + len(col1) + 1 + 4 + 4
-	col2Length := 1 + len(col2) + 1 + 4 + 4
-	col3Length := 1 + len(col3) + 1 + 4 + 4
-
-	msg := make([]byte, 1+4+len(namespace)+1+len(relationName)+1+1+
-		2+col1Length+col2Length+col3Length)
-	msg[0] = 'R'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	off += s.putString(msg[off:], namespace)
-	off += s.putString(msg[off:], relationName)
-	msg[off] = 1
-	off++
-	bigEndian.PutUint16(msg[off:], 3)
-	off += 2
-
-	msg[off] = 1 // column id is key
-	off++
-	off += s.putString(msg[off:], col1)
-	bigEndian.PutUint32(msg[off:], 20) // int8
-	off += 4
-	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
-	off += 4
-
-	msg[off] = 0
-	off++
-	off += s.putString(msg[off:], col2)
-	bigEndian.PutUint32(msg[off:], 25) // text
-	off += 4
-	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
-	off += 4
-
-	msg[off] = 0
-	off++
-	off += s.putString(msg[off:], col3)
-	bigEndian.PutUint32(msg[off:], 1184) // timestamptz
-	off += 4
-	bigEndian.PutUint32(msg[off:], uint32(noAtttypmod))
-	off += 4
-
-	expected := &RelationMessage{
-		RelationID:      relationID,
-		Namespace:       namespace,
-		RelationName:    relationName,
-		ReplicaIdentity: 1,
-		ColumnNum:       3,
-		Columns: []*RelationMessageColumn{
-			{
-				Flags:        1,
-				Name:         col1,
-				DataType:     20,
-				TypeModifier: -1,
-			},
-			{
-				Flags:        0,
-				Name:         col2,
-				DataType:     25,
-				TypeModifier: -1,
-			},
-			{
-				Flags:        0,
-				Name:         col3,
-				DataType:     1184,
-				TypeModifier: -1,
-			},
-		},
-	}
-	expected.msgType = 'R'
-
-	return msg, expected
-}
-
 func TestTypeMessageSuite(t *testing.T) {
 	suite.Run(t, new(typeMessageSuite))
 }
@@ -302,29 +714,6 @@ func (s *typeMessageSuite) Test() {
 	s.True(ok)
 
 	s.Equal(expected, typeMsg)
-}
-
-func (s *messageSuite) createTypeTestData() ([]byte, *TypeMessage) {
-	dataType := uint32(1184) // timestamptz
-	namespace := "public"
-	name := "created_at"
-
-	msg := make([]byte, 1+4+len(namespace)+1+len(name)+1)
-	msg[0] = 'Y'
-	off := 1
-	bigEndian.PutUint32(msg[off:], dataType)
-	off += 4
-	off += s.putString(msg[off:], namespace)
-	s.putString(msg[off:], name)
-
-	expected := &TypeMessage{
-		DataType:  dataType,
-		Namespace: namespace,
-		Name:      name,
-	}
-	expected.msgType = 'Y'
-
-	return msg, expected
 }
 
 func TestInsertMessageSuite(t *testing.T) {
@@ -347,67 +736,6 @@ func (s *insertMessageSuite) Test() {
 	s.Equal(expected, insertMsg)
 }
 
-func (s *messageSuite) createInsertTestData() ([]byte, *InsertMessage) {
-	relationID := s.newRelationID()
-
-	col1Data := []byte("1")
-	col2Data := []byte("myname")
-	col3Data := []byte("123456789")
-	col1Length := s.tupleColumnLength('t', col1Data)
-	col2Length := s.tupleColumnLength('t', col2Data)
-	col3Length := s.tupleColumnLength('t', col3Data)
-	col4Length := s.tupleColumnLength('n', nil)
-	col5Length := s.tupleColumnLength('u', nil)
-
-	msg := make([]byte, 1+4+1+2+col1Length+col2Length+col3Length+col4Length+col5Length)
-	msg[0] = 'I'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'N'
-	off++
-	bigEndian.PutUint16(msg[off:], 5)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', col1Data)
-	off += s.putTupleColumn(msg[off:], 't', col2Data)
-	off += s.putTupleColumn(msg[off:], 't', col3Data)
-	off += s.putTupleColumn(msg[off:], 'n', nil)
-	s.putTupleColumn(msg[off:], 'u', nil)
-
-	expected := &InsertMessage{
-		RelationID: relationID,
-		Tuple: &TupleData{
-			ColumnNum: 5,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(col1Data)),
-					Data:     col1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(col2Data)),
-					Data:     col2Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(col3Data)),
-					Data:     col3Data,
-				},
-				{
-					DataType: TupleDataTypeNull,
-				},
-				{
-					DataType: TupleDataTypeToast,
-				},
-			},
-		},
-	}
-	expected.msgType = 'I'
-
-	return msg, expected
-}
-
 func TestUpdateMessageSuite(t *testing.T) {
 	suite.Run(t, new(updateMessageSuite))
 }
@@ -426,69 +754,6 @@ func (s *updateMessageSuite) TestWithOldTupleTypeK() {
 	s.Equal(expected, updateMsg)
 }
 
-func (s *messageSuite) createUpdateTestDataTypeK() ([]byte, *UpdateMessage) {
-	relationID := s.newRelationID()
-
-	oldCol1Data := []byte("123") // like an id
-	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
-
-	newCol1Data := []byte("1124")
-	newCol2Data := []byte("myname")
-	newCol1Length := s.tupleColumnLength('t', newCol1Data)
-	newCol2Length := s.tupleColumnLength('t', newCol2Data)
-
-	msg := make([]byte, 1+4+
-		1+2+oldCol1Length+
-		1+2+newCol1Length+newCol2Length)
-	msg[0] = 'U'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'K'
-	off += 1
-	bigEndian.PutUint16(msg[off:], 1)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
-	msg[off] = 'N'
-	off++
-	bigEndian.PutUint16(msg[off:], 2)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
-	s.putTupleColumn(msg[off:], 't', newCol2Data)
-	expected := &UpdateMessage{
-		RelationID:   relationID,
-		OldTupleType: UpdateMessageTupleTypeKey,
-		OldTuple: &TupleData{
-			ColumnNum: 1,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol1Data)),
-					Data:     oldCol1Data,
-				},
-			},
-		},
-		NewTuple: &TupleData{
-			ColumnNum: 2,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol1Data)),
-					Data:     newCol1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol2Data)),
-					Data:     newCol2Data,
-				},
-			},
-		},
-	}
-	expected.msgType = 'U'
-
-	return msg, expected
-}
-
 func (s *updateMessageSuite) TestWithOldTupleTypeO() {
 	msg, expected := s.createUpdateTestDataTypeO()
 	m, err := Parse(msg)
@@ -499,77 +764,6 @@ func (s *updateMessageSuite) TestWithOldTupleTypeO() {
 	s.Equal(expected, updateMsg)
 }
 
-func (s *messageSuite) createUpdateTestDataTypeO() ([]byte, *UpdateMessage) {
-	relationID := s.newRelationID()
-
-	oldCol1Data := []byte("123") // like an id
-	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
-	oldCol2Data := []byte("myoldname")
-	oldCol2Length := s.tupleColumnLength('t', oldCol2Data)
-
-	newCol1Data := []byte("1124")
-	newCol2Data := []byte("myname")
-	newCol1Length := s.tupleColumnLength('t', newCol1Data)
-	newCol2Length := s.tupleColumnLength('t', newCol2Data)
-
-	msg := make([]byte, 1+4+
-		1+2+oldCol1Length+oldCol2Length+
-		1+2+newCol1Length+newCol2Length)
-	msg[0] = 'U'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'O'
-	off += 1
-	bigEndian.PutUint16(msg[off:], 2)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
-	off += s.putTupleColumn(msg[off:], 't', oldCol2Data)
-	msg[off] = 'N'
-	off++
-	bigEndian.PutUint16(msg[off:], 2)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
-	s.putTupleColumn(msg[off:], 't', newCol2Data)
-	expected := &UpdateMessage{
-		RelationID:   relationID,
-		OldTupleType: UpdateMessageTupleTypeOld,
-		OldTuple: &TupleData{
-			ColumnNum: 2,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol1Data)),
-					Data:     oldCol1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol2Data)),
-					Data:     oldCol2Data,
-				},
-			},
-		},
-		NewTuple: &TupleData{
-			ColumnNum: 2,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol1Data)),
-					Data:     newCol1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol2Data)),
-					Data:     newCol2Data,
-				},
-			},
-		},
-	}
-	expected.msgType = 'U'
-
-	return msg, expected
-}
-
 func (s *updateMessageSuite) TestWithoutOldTuple() {
 	msg, expected := s.createUpdateTestDataWithoutOldTuple()
 	m, err := Parse(msg)
@@ -578,50 +772,6 @@ func (s *updateMessageSuite) TestWithoutOldTuple() {
 	s.True(ok)
 
 	s.Equal(expected, updateMsg)
-}
-
-func (s *messageSuite) createUpdateTestDataWithoutOldTuple() ([]byte, *UpdateMessage) {
-	relationID := s.newRelationID()
-
-	newCol1Data := []byte("1124")
-	newCol2Data := []byte("myname")
-	newCol1Length := s.tupleColumnLength('t', newCol1Data)
-	newCol2Length := s.tupleColumnLength('t', newCol2Data)
-
-	msg := make([]byte, 1+4+
-		1+2+newCol1Length+newCol2Length)
-	msg[0] = 'U'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'N'
-	off++
-	bigEndian.PutUint16(msg[off:], 2)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', newCol1Data)
-	s.putTupleColumn(msg[off:], 't', newCol2Data)
-	expected := &UpdateMessage{
-		RelationID:   relationID,
-		OldTupleType: UpdateMessageTupleTypeNone,
-		NewTuple: &TupleData{
-			ColumnNum: 2,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol1Data)),
-					Data:     newCol1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(newCol2Data)),
-					Data:     newCol2Data,
-				},
-			},
-		},
-	}
-	expected.msgType = 'U'
-
-	return msg, expected
 }
 
 func TestDeleteMessageSuite(t *testing.T) {
@@ -643,41 +793,6 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeK() {
 	s.Equal(expected, deleteMsg)
 }
 
-func (s *messageSuite) createDeleteTestDataTypeK() ([]byte, *DeleteMessage) {
-	relationID := s.newRelationID()
-
-	oldCol1Data := []byte("123") // like an id
-	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
-
-	msg := make([]byte, 1+4+
-		1+2+oldCol1Length)
-	msg[0] = 'D'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'K'
-	off++
-	bigEndian.PutUint16(msg[off:], 1)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
-	expected := &DeleteMessage{
-		RelationID:   relationID,
-		OldTupleType: DeleteMessageTupleTypeKey,
-		OldTuple: &TupleData{
-			ColumnNum: 1,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol1Data)),
-					Data:     oldCol1Data,
-				},
-			},
-		},
-	}
-	expected.msgType = 'D'
-	return msg, expected
-}
-
 func (s *deleteMessageSuite) TestWithOldTupleTypeO() {
 	msg, expected := s.createDeleteTestDataTypeO()
 
@@ -687,49 +802,6 @@ func (s *deleteMessageSuite) TestWithOldTupleTypeO() {
 	s.True(ok)
 
 	s.Equal(expected, deleteMsg)
-}
-
-func (s *messageSuite) createDeleteTestDataTypeO() ([]byte, *DeleteMessage) {
-	relationID := s.newRelationID()
-
-	oldCol1Data := []byte("123") // like an id
-	oldCol1Length := s.tupleColumnLength('t', oldCol1Data)
-	oldCol2Data := []byte("myoldname")
-	oldCol2Length := s.tupleColumnLength('t', oldCol2Data)
-
-	msg := make([]byte, 1+4+
-		1+2+oldCol1Length+oldCol2Length)
-	msg[0] = 'D'
-	off := 1
-	bigEndian.PutUint32(msg[off:], relationID)
-	off += 4
-	msg[off] = 'O'
-	off += 1
-	bigEndian.PutUint16(msg[off:], 2)
-	off += 2
-	off += s.putTupleColumn(msg[off:], 't', oldCol1Data)
-	off += s.putTupleColumn(msg[off:], 't', oldCol2Data)
-	expected := &DeleteMessage{
-		RelationID:   relationID,
-		OldTupleType: DeleteMessageTupleTypeOld,
-		OldTuple: &TupleData{
-			ColumnNum: 2,
-			Columns: []*TupleDataColumn{
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol1Data)),
-					Data:     oldCol1Data,
-				},
-				{
-					DataType: TupleDataTypeText,
-					Length:   uint32(len(oldCol2Data)),
-					Data:     oldCol2Data,
-				},
-			},
-		},
-	}
-	expected.msgType = 'D'
-	return msg, expected
 }
 
 func TestTruncateMessageSuite(t *testing.T) {
@@ -751,33 +823,6 @@ func (s *truncateMessageSuite) Test() {
 	s.Equal(expected, truncateMsg)
 }
 
-func (s *messageSuite) createTruncateTestData() ([]byte, *TruncateMessage) {
-	relationID1 := s.newRelationID()
-	relationID2 := s.newRelationID()
-	option := uint8(0x01 | 0x02)
-
-	msg := make([]byte, 1+4+1+4*2)
-	msg[0] = 'T'
-	off := 1
-	bigEndian.PutUint32(msg[off:], 2)
-	off += 4
-	msg[off] = option
-	off++
-	bigEndian.PutUint32(msg[off:], relationID1)
-	off += 4
-	bigEndian.PutUint32(msg[off:], relationID2)
-	expected := &TruncateMessage{
-		RelationNum: 2,
-		Option:      TruncateOptionCascade | TruncateOptionRestartIdentity,
-		RelationIDs: []uint32{
-			relationID1,
-			relationID2,
-		},
-	}
-	expected.msgType = 'T'
-	return msg, expected
-}
-
 func TestLogicalDecodingMessageSuite(t *testing.T) {
 	suite.Run(t, new(logicalDecodingMessageSuite))
 }
@@ -790,7 +835,7 @@ func (s *logicalDecodingMessageSuite) Test() {
 	msg := make([]byte, 1+1+8+5+4+5)
 	msg[0] = 'M'
 
-	expected := putMessageTestData(msg[1:], &s.messageSuite)
+	expected := s.putMessageTestData(msg[1:])
 
 	expected.msgType = MessageTypeMessage
 

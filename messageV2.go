@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// MessageDecoderV2 decodes message from V2 protocol into struct.
 type MessageDecoderV2 interface {
 	MessageDecoder
 	DecodeV2(src []byte, inStream bool) error
@@ -77,7 +78,8 @@ func (m *StreamCommitMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 type StreamAbortMessageV2 struct {
 	baseMessage
 
-	Xid    uint32
+	Xid uint32
+	// Xid of the subtransaction (will be same as xid of the transaction for top-level transactions).
 	SubXid uint32
 }
 

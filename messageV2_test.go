@@ -1,45 +1,10 @@
 package pglogrepl
 
 import (
-	"errors"
 	"fmt"
 	"github.com/stretchr/testify/suite"
 	"testing"
 )
-
-func putMessageTestData(msg []byte, s *messageSuite) *LogicalDecodingMessage {
-	// transaction flag
-	msg[0] = 1
-	off := 1
-
-	lsn := s.newLSN()
-	bigEndian.PutUint64(msg[off:], uint64(lsn))
-	off += 8
-
-	off += s.putString(msg[off:], "test")
-
-	content := "hello"
-
-	bigEndian.PutUint32(msg[off:], uint32(len(content)))
-	off += 4
-
-	for i := 0; i < len(content); i++ {
-		msg[off] = content[i]
-		off++
-	}
-	return &LogicalDecodingMessage{
-		Transactional: true,
-		LSN:           lsn,
-		Prefix:        "test",
-		Content:       []byte("hello"),
-	}
-}
-
-func (s *messageSuite) assertV1NotSupported(msg []byte) {
-	_, err := Parse(msg)
-	s.Error(err)
-	s.True(errors.Is(err, errMsgNotSupported))
-}
 
 func TestLogicalDecodingMessageV2Suite(t *testing.T) {
 	suite.Run(t, new(logicalDecodingMessageSuiteV2))
@@ -55,7 +20,7 @@ func (s *logicalDecodingMessageSuiteV2) Test() {
 	xid := s.newXid()
 	bigEndian.PutUint32(msg[1:], xid)
 
-	expected := putMessageTestData(msg[5:], &s.messageSuite)
+	expected := s.putMessageTestData(msg[5:])
 
 	expectedV2 := &LogicalDecodingMessageV2{
 		LogicalDecodingMessage:   *expected,
@@ -356,14 +321,4 @@ func (s *truncateMessageSuiteV2) Test() {
 	s.True(ok)
 	s.Equal(xid, truncateMsg.Xid)
 	s.Equal(expected, &truncateMsg.TruncateMessage)
-}
-
-func (s *messageSuite) insertXid(msg []byte) ([]byte, uint32) {
-	msgV2 := make([]byte, 4+len(msg))
-	msgV2[0] = msg[0]
-	xid := s.newXid()
-	bigEndian.PutUint32(msgV2[1:], xid)
-	copy(msgV2[5:], msg[1:])
-
-	return msgV2, xid
 }
