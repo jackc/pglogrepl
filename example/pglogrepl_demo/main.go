@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"log"
 	"os"
 	"time"
@@ -16,6 +15,7 @@ import (
 func main() {
 	//	const outputPlugin = "test_decoding"
 	const outputPlugin = "pgoutput"
+	//const outputPlugin = "wal2json"
 	conn, err := pgconn.Connect(context.Background(), os.Getenv("PGLOGREPL_DEMO_CONN_STRING"))
 	if err != nil {
 		log.Fatalln("failed to connect to PostgreSQL server:", err)
@@ -47,12 +47,12 @@ func main() {
 			"streaming 'true'",
 		}
 		v2 = true
-		//uncomment for v1
-		//pluginArguments = []string{
+		// uncomment for v1
+		// pluginArguments = []string{
 		//	"proto_version '1'",
 		//	"publication_names 'pglogrepl_demo'",
 		//	"messages 'true'",
-		//}
+		// }
 	} else if outputPlugin == "wal2json" {
 		pluginArguments = []string{"\"pretty-print\" 'true'"}
 	}
@@ -70,6 +70,7 @@ func main() {
 		log.Fatalln("CreateReplicationSlot failed:", err)
 	}
 	log.Println("Created temporary replication slot:", slotName)
+
 	err = pglogrepl.StartReplication(context.Background(), conn, slotName, sysident.XLogPos, pglogrepl.StartReplicationOptions{PluginArgs: pluginArguments})
 	if err != nil {
 		log.Fatalln("StartReplication failed:", err)
@@ -93,7 +94,7 @@ func main() {
 			if err != nil {
 				log.Fatalln("SendStandbyStatusUpdate failed:", err)
 			}
-			log.Println("Sent Standby status message")
+			log.Printf("Sent Standby status message at %s\n", clientXLogPos.String())
 			nextStandbyMessageDeadline = time.Now().Add(standbyMessageTimeout)
 		}
 
@@ -123,7 +124,7 @@ func main() {
 			if err != nil {
 				log.Fatalln("ParsePrimaryKeepaliveMessage failed:", err)
 			}
-			//log.Println("Primary Keepalive Message =>", "ServerWALEnd:", pkm.ServerWALEnd, "ServerTime:", pkm.ServerTime, "ReplyRequested:", pkm.ReplyRequested)
+			log.Println("Primary Keepalive Message =>", "ServerWALEnd:", pkm.ServerWALEnd, "ServerTime:", pkm.ServerTime, "ReplyRequested:", pkm.ReplyRequested)
 
 			if pkm.ReplyRequested {
 				nextStandbyMessageDeadline = time.Time{}
@@ -135,11 +136,15 @@ func main() {
 				log.Fatalln("ParseXLogData failed:", err)
 			}
 
-			log.Printf("XLogData => WALStart %s ServerWALEnd %s ServerTime %s WALData:\n%s\n", xld.WALStart, xld.ServerWALEnd, xld.ServerTime, hex.Dump(xld.WALData))
-			if v2 {
-				processV2(xld.WALData, relationsV2, typeMap, &inStream)
+			if outputPlugin == "wal2json" {
+				log.Printf("wal2json data: %s\n", string(xld.WALData))
 			} else {
-				processV1(xld.WALData, relations, typeMap)
+				log.Printf("XLogData => WALStart %s ServerWALEnd %s ServerTime %s WALData:\n", xld.WALStart, xld.ServerWALEnd, xld.ServerTime)
+				if v2 {
+					processV2(xld.WALData, relationsV2, typeMap, &inStream)
+				} else {
+					processV1(xld.WALData, relations, typeMap)
+				}
 			}
 
 			clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
