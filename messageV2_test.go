@@ -36,6 +36,20 @@ func (s *logicalDecodingMessageSuiteV2) Test() {
 	s.Equal(expectedV2, logicalDecodingMsg)
 }
 
+func (s *logicalDecodingMessageSuiteV2) TestNoStream() {
+	msg := make([]byte, 1+1+8+5+4+5)
+	msg[0] = 'M'
+	expected := s.putMessageTestData(msg[1:])
+	expected.msgType = MessageTypeMessage
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	logicalDecodingMsg, ok := m.(*LogicalDecodingMessageV2)
+	s.True(ok)
+
+	s.Equal(uint32(0), logicalDecodingMsg.Xid)
+	s.Equal(expected, &logicalDecodingMsg.LogicalDecodingMessage)
+}
+
 func TestStreamStartV2Suite(t *testing.T) {
 	suite.Run(t, new(streamStartSuite))
 }
@@ -187,6 +201,16 @@ func (s *relationMessageV2Suite) Test() {
 	s.Equal(expected, &relMsg.RelationMessage)
 }
 
+func (s *relationMessageV2Suite) TestNoStream() {
+	msg, expected := s.createRelationTestData()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	relMsg, ok := m.(*RelationMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), relMsg.Xid)
+	s.Equal(expected, &relMsg.RelationMessage)
+}
+
 func TestTypeMessageV2Suite(t *testing.T) {
 	suite.Run(t, new(typeMessageV2Suite))
 }
@@ -204,6 +228,16 @@ func (s *typeMessageV2Suite) Test() {
 	typeMsg, ok := m.(*TypeMessageV2)
 	s.True(ok)
 	s.Equal(xid, typeMsg.Xid)
+	s.Equal(expected, &typeMsg.TypeMessage)
+}
+
+func (s *typeMessageV2Suite) TestNoStream() {
+	msg, expected := s.createTypeTestData()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	typeMsg, ok := m.(*TypeMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), typeMsg.Xid)
 	s.Equal(expected, &typeMsg.TypeMessage)
 }
 
@@ -227,6 +261,17 @@ func (s *insertMessageV2Suite) Test() {
 	s.Equal(expected, &insertMsg.InsertMessage)
 }
 
+func (s *insertMessageV2Suite) TestNoStream() {
+	msg, expected := s.createInsertTestData()
+
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	insertMsg, ok := m.(*InsertMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), insertMsg.Xid)
+	s.Equal(expected, &insertMsg.InsertMessage)
+}
+
 func TestUpdateMessageV2Suite(t *testing.T) {
 	suite.Run(t, new(updateMessageV2Suite))
 }
@@ -247,6 +292,16 @@ func (s *updateMessageV2Suite) TestUpdateV2WithOldTupleTypeK() {
 	s.Equal(expected, &updateMsg.UpdateMessage)
 }
 
+func (s *updateMessageV2Suite) TestUpdateV2WithOldTupleTypeKNoStream() {
+	msg, expected := s.createUpdateTestDataTypeK()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), updateMsg.Xid)
+	s.Equal(expected, &updateMsg.UpdateMessage)
+}
+
 func (s *updateMessageV2Suite) TestUpdateV2WithOldTupleTypeO() {
 	msg, expected := s.createUpdateTestDataTypeO()
 	msgV2, xid := s.insertXid(msg)
@@ -259,6 +314,16 @@ func (s *updateMessageV2Suite) TestUpdateV2WithOldTupleTypeO() {
 	s.Equal(expected, &updateMsg.UpdateMessage)
 }
 
+func (s *updateMessageV2Suite) TestUpdateV2WithOldTupleTypeONoStream() {
+	msg, expected := s.createUpdateTestDataTypeO()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), updateMsg.Xid)
+	s.Equal(expected, &updateMsg.UpdateMessage)
+}
+
 func (s *updateMessageV2Suite) TestUpdateV2WithoutOldTuple() {
 	msg, expected := s.createUpdateTestDataWithoutOldTuple()
 	msgV2, xid := s.insertXid(msg)
@@ -268,6 +333,16 @@ func (s *updateMessageV2Suite) TestUpdateV2WithoutOldTuple() {
 	updateMsg, ok := m.(*UpdateMessageV2)
 	s.True(ok)
 	s.Equal(xid, updateMsg.Xid)
+	s.Equal(expected, &updateMsg.UpdateMessage)
+}
+
+func (s *updateMessageV2Suite) TestUpdateV2WithoutOldTupleNoStream() {
+	msg, expected := s.createUpdateTestDataWithoutOldTuple()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	updateMsg, ok := m.(*UpdateMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), updateMsg.Xid)
 	s.Equal(expected, &updateMsg.UpdateMessage)
 }
 
@@ -291,6 +366,16 @@ func (s *deleteMessageV2Suite) TestV2WithOldTupleTypeK() {
 	s.Equal(expected, &deleteMsg.DeleteMessage)
 }
 
+func (s *deleteMessageV2Suite) TestV2WithOldTupleTypeKNoStream() {
+	msg, expected := s.createDeleteTestDataTypeK()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	deleteMsg, ok := m.(*DeleteMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), deleteMsg.Xid)
+	s.Equal(expected, &deleteMsg.DeleteMessage)
+}
+
 func (s *deleteMessageV2Suite) TestV2WithOldTupleTypeO() {
 	msg, expected := s.createDeleteTestDataTypeO()
 	msgV2, xid := s.insertXid(msg)
@@ -300,6 +385,16 @@ func (s *deleteMessageV2Suite) TestV2WithOldTupleTypeO() {
 	deleteMsg, ok := m.(*DeleteMessageV2)
 	s.True(ok)
 	s.Equal(xid, deleteMsg.Xid)
+	s.Equal(expected, &deleteMsg.DeleteMessage)
+}
+
+func (s *deleteMessageV2Suite) TestV2WithOldTupleTypeONoStream() {
+	msg, expected := s.createDeleteTestDataTypeO()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	deleteMsg, ok := m.(*DeleteMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), deleteMsg.Xid)
 	s.Equal(expected, &deleteMsg.DeleteMessage)
 }
 
@@ -320,5 +415,15 @@ func (s *truncateMessageSuiteV2) Test() {
 	truncateMsg, ok := m.(*TruncateMessageV2)
 	s.True(ok)
 	s.Equal(xid, truncateMsg.Xid)
+	s.Equal(expected, &truncateMsg.TruncateMessage)
+}
+
+func (s *truncateMessageSuiteV2) TestNoStream() {
+	msg, expected := s.createTruncateTestData()
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	truncateMsg, ok := m.(*TruncateMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), truncateMsg.Xid)
 	s.Equal(expected, &truncateMsg.TruncateMessage)
 }
