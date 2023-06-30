@@ -11,6 +11,7 @@ type MessageDecoderV2 interface {
 	DecodeV2(src []byte, inStream bool) error
 }
 
+// StreamStartMessageV2 is a stream start message.
 type StreamStartMessageV2 struct {
 	baseMessage
 
@@ -19,6 +20,7 @@ type StreamStartMessageV2 struct {
 	FirstSegment uint8
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *StreamStartMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 	if len(src) < 5 {
 		return m.lengthError("StreamStartMessageV2", 5, len(src))
@@ -34,17 +36,20 @@ func (m *StreamStartMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 	return nil
 }
 
+// StreamStopMessageV2 is a stream stop message.
 type StreamStopMessageV2 struct {
 	baseMessage
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *StreamStopMessageV2) DecodeV2(_ []byte, _ bool) (err error) {
-	// stream stop has no data
+	// stream stop has no data.
 	m.SetType(MessageTypeStreamStop)
 
 	return nil
 }
 
+// StreamCommitMessageV2 is a stream commit message.
 type StreamCommitMessageV2 struct {
 	baseMessage
 
@@ -55,6 +60,7 @@ type StreamCommitMessageV2 struct {
 	CommitTime        time.Time
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *StreamCommitMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 	if len(src) < 29 {
 		return m.lengthError("StreamCommitMessageV2", 29, len(src))
@@ -75,6 +81,7 @@ func (m *StreamCommitMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 	return nil
 }
 
+// StreamAbortMessageV2 is a stream abort message.
 type StreamAbortMessageV2 struct {
 	baseMessage
 
@@ -83,6 +90,7 @@ type StreamAbortMessageV2 struct {
 	SubXid uint32
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *StreamAbortMessageV2) DecodeV2(src []byte, _ bool) (err error) {
 	if len(src) < 8 {
 		return m.lengthError("StreamAbortMessageV2", 8, len(src))
@@ -148,15 +156,19 @@ func ParseV2(data []byte, inStream bool) (m Message, err error) {
 	return decoder.(Message), nil
 }
 
+// InStreamMessageV2WithXid is a V2 protocol message
 type InStreamMessageV2WithXid struct {
+	// Xid of the transaction (only present for streamed transactions).
 	Xid uint32
 }
 
+// LogicalDecodingMessageV2 is a logical decoding message.
 type LogicalDecodingMessageV2 struct {
 	LogicalDecodingMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *LogicalDecodingMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.LogicalDecodingMessage.Decode(src)
@@ -171,11 +183,13 @@ func (m *LogicalDecodingMessageV2) DecodeV2(src []byte, inStream bool) (err erro
 	return m.LogicalDecodingMessage.Decode(src)
 }
 
+// RelationMessageV2 is a relation message.
 type RelationMessageV2 struct {
 	RelationMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *RelationMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.RelationMessage.Decode(src)
@@ -190,11 +204,13 @@ func (m *RelationMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	return m.RelationMessage.Decode(src)
 }
 
+// TypeMessageV2 is a type message.
 type TypeMessageV2 struct {
 	TypeMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *TypeMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.TypeMessage.Decode(src)
@@ -209,11 +225,13 @@ func (m *TypeMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	return m.TypeMessage.Decode(src)
 }
 
+// InsertMessageV2 is an insert message.
 type InsertMessageV2 struct {
 	InsertMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *InsertMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.InsertMessage.Decode(src)
@@ -228,11 +246,13 @@ func (m *InsertMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	return m.InsertMessage.Decode(src)
 }
 
+// UpdateMessageV2 is an update message.
 type UpdateMessageV2 struct {
 	UpdateMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *UpdateMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.UpdateMessage.Decode(src)
@@ -247,11 +267,13 @@ func (m *UpdateMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	return m.UpdateMessage.Decode(src)
 }
 
+// DeleteMessageV2 is a delete message.
 type DeleteMessageV2 struct {
 	DeleteMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *DeleteMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.DeleteMessage.Decode(src)
@@ -266,11 +288,13 @@ func (m *DeleteMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	return m.DeleteMessage.Decode(src)
 }
 
+// TruncateMessageV2 is a truncate message.
 type TruncateMessageV2 struct {
 	TruncateMessage
 	InStreamMessageV2WithXid
 }
 
+// DecodeV2 decodes to message from V2 src.
 func (m *TruncateMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 	if !inStream {
 		return m.TruncateMessage.Decode(src)
