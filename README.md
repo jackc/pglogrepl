@@ -1,5 +1,5 @@
 [![](https://godoc.org/github.com/jackc/pglogrepl?status.svg)](https://godoc.org/github.com/jackc/pglogrepl)
-[![Build Status](https://travis-ci.org/jackc/pglogrepl.svg)](https://travis-ci.org/jackc/pglogrepl)
+[![CI](https://github.com/jackc/pglogrepl/actions/workflows/ci.yml/badge.svg)](https://github.com/jackc/pglogrepl/actions/workflows/ci.yml)
 
 # pglogrepl
 
