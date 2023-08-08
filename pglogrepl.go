@@ -569,12 +569,10 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 	if err != nil {
 		return result, err
 	}
-	result.Tablespaces, err = getTableSpaceInfo(ctx, conn)
-	if err != nil {
-		return result, err
-	}
-	_, err = SendStandbyCopyDone(context.Background(), conn)
-	return result, err
+
+	// no tablespace infos are received here, only consume command complete response.
+	_, err = getTableSpaceInfo(ctx, conn)
+	return
 }
 
 type PrimaryKeepaliveMessage struct {
