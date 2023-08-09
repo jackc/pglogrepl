@@ -570,15 +570,25 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 		return result, err
 	}
 
-	// Base_Backup done, server send a command complete response
-	pack, err := conn.ReceiveMessage(ctx)
+	// Base_Backup done, server send a command complete response from pg13
+	vmaj, err := getMajorVersion(conn)
 	if err != nil {
 		return
 	}
-	_, ok := pack.(*pgproto3.CommandComplete)
-	if !ok {
-		err = fmt.Errorf("expect command_complete, got %T", pack)
-		return
+	var (
+		pack pgproto3.BackendMessage
+		ok   bool
+	)
+	if vmaj > 12 {
+		pack, err = conn.ReceiveMessage(ctx)
+		if err != nil {
+			return
+		}
+		_, ok = pack.(*pgproto3.CommandComplete)
+		if !ok {
+			err = fmt.Errorf("expect command_complete, got %T", pack)
+			return
+		}
 	}
 
 	// simple query done, server send a ready for query response
@@ -592,6 +602,24 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 		return
 	}
 	return
+}
+
+func getMajorVersion(conn *pgconn.PgConn) (int, error) {
+	sversion := conn.ParameterStatus("server_version")
+	if len(sversion) == 0 {
+		return 0, fmt.Errorf("no server_version")
+	}
+	var vmaj, vmin, vrev int
+	cnt, err := fmt.Sscanf(sversion, "%d.%d.%d", &vmaj, &vmin, &vrev)
+	if err != nil {
+		return 0, err
+	}
+	switch cnt {
+	case 1, 2, 3:
+		return vmaj, nil
+	default:
+	}
+	return 0, fmt.Errorf("unknown server version")
 }
 
 type PrimaryKeepaliveMessage struct {
