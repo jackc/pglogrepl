@@ -570,8 +570,27 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 		return result, err
 	}
 
-	// no tablespace infos are received here, only consume command complete response.
-	_, err = getTableSpaceInfo(ctx, conn)
+	// Base_Backup done, server send a command complete response
+	pack, err := conn.ReceiveMessage(ctx)
+	if err != nil {
+		return
+	}
+	_, ok := pack.(*pgproto3.CommandComplete)
+	if !ok {
+		err = fmt.Errorf("expect command_complete, got %T", pack)
+		return
+	}
+
+	// simple query done, server send a ready for query response
+	pack, err = conn.ReceiveMessage(ctx)
+	if err != nil {
+		return
+	}
+	_, ok = pack.(*pgproto3.ReadyForQuery)
+	if !ok {
+		err = fmt.Errorf("expect ready_for_query, got %T", pack)
+		return
+	}
 	return
 }
 
