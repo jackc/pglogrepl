@@ -571,7 +571,7 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 	}
 
 	// Base_Backup done, server send a command complete response from pg13
-	vmaj, err := getMajorVersion(conn)
+	vmaj, err := serverMajorVersion(conn)
 	if err != nil {
 		return
 	}
@@ -602,24 +602,6 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 		return
 	}
 	return
-}
-
-func getMajorVersion(conn *pgconn.PgConn) (int, error) {
-	sversion := conn.ParameterStatus("server_version")
-	if len(sversion) == 0 {
-		return 0, fmt.Errorf("no server_version")
-	}
-	var vmaj, vmin, vrev int
-	cnt, err := fmt.Sscanf(sversion, "%d.%d.%d", &vmaj, &vmin, &vrev)
-	if err != nil {
-		return 0, err
-	}
-	switch cnt {
-	case 1, 2, 3:
-		return vmaj, nil
-	default:
-	}
-	return 0, fmt.Errorf("unknown server version")
 }
 
 type PrimaryKeepaliveMessage struct {
