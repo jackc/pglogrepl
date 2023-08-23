@@ -125,7 +125,9 @@ func main() {
 				log.Fatalln("ParsePrimaryKeepaliveMessage failed:", err)
 			}
 			log.Println("Primary Keepalive Message =>", "ServerWALEnd:", pkm.ServerWALEnd, "ServerTime:", pkm.ServerTime, "ReplyRequested:", pkm.ReplyRequested)
-
+			if pkm.ServerWALEnd > clientXLogPos {
+				clientXLogPos = pkm.ServerWALEnd
+			}
 			if pkm.ReplyRequested {
 				nextStandbyMessageDeadline = time.Time{}
 			}
@@ -147,7 +149,9 @@ func main() {
 				}
 			}
 
-			clientXLogPos = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
+			if xld.WALStart > clientXLogPos {
+				clientXLogPos = xld.WALStart
+			}
 		}
 	}
 }
