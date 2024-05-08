@@ -1,6 +1,6 @@
 module github.com/jackc/pglogrepl
 
-go 1.19
+go 1.21
 
 require (
 	github.com/jackc/pgio v1.0.0
