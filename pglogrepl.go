@@ -657,7 +657,10 @@ func SendStandbyStatusUpdate(_ context.Context, conn *pgconn.PgConn, ssu Standby
 	}
 
 	cd := &pgproto3.CopyData{Data: data}
-	buf := cd.Encode(nil)
+	buf, err := cd.Encode(nil)
+	if err != nil {
+		return err
+	}
 
 	return conn.Frontend().SendUnbufferedEncodedCopyData(buf)
 }
