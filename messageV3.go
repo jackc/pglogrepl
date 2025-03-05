@@ -182,7 +182,7 @@ func (m *StreamPrepareMessageV3) DecodeV3(src []byte, _ bool) (err error) {
 	return nil
 }
 
-// ParseV2 parse a logical replication message from protocol version #3
+// ParseV3 parse a logical replication message from protocol version #3
 // it accepts a slice of bytes read from PG and inStream parameter
 // inStream must be true when StreamStartMessageV2 has been read
 // it must be false after StreamStopMessageV2 has been read
