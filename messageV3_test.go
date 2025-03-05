@@ -18,22 +18,21 @@ type tooShortMessageV3Suite struct {
 func (s *tooShortMessageV3Suite) TestTooShortError() {
 	msg := make([]byte, 29)
 
-	tooShortForMessageType := func(messageType MessageType,
-		messageTypeName string, minBytes int) {
+	tooShortForMessageType := func(messageType MessageType, minBytes int) {
 		for _, inStream := range []bool{false, true} {
 			msg[0] = uint8(messageType)
 			m, err := ParseV3(msg, inStream)
 			s.Nil(m)
 			s.ErrorContains(err,
-				fmt.Sprintf("%s must have %d bytes, got 28 bytes", messageTypeName, minBytes))
+				fmt.Sprintf("%sMessage must have %d bytes, got 28 bytes", messageType, minBytes))
 		}
 	}
 
-	tooShortForMessageType(MessageTypeBeginPrepare, "BeginPrepareMessage", 29)
-	tooShortForMessageType(MessageTypePrepare, "PrepareMessage", 30)
-	tooShortForMessageType(MessageTypeCommitPrepared, "CommitPreparedMessage", 30)
-	tooShortForMessageType(MessageTypeRollbackPrepared, "RollbackPreparedMessage", 38)
-	tooShortForMessageType(MessageTypeStreamPrepare, "StreamPrepareMessage", 30)
+	tooShortForMessageType(MessageTypeBeginPrepare, 29)
+	tooShortForMessageType(MessageTypePrepare, 30)
+	tooShortForMessageType(MessageTypeCommitPrepared, 30)
+	tooShortForMessageType(MessageTypeRollbackPrepared, 38)
+	tooShortForMessageType(MessageTypeStreamPrepare, 30)
 }
 
 func TestBeginPrepareMessageV3Suite(t *testing.T) {

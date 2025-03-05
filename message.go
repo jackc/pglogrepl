@@ -46,8 +46,16 @@ func (t MessageType) String() string {
 		return "StreamCommit"
 	case MessageTypeStreamAbort:
 		return "StreamAbort"
+	case MessageTypeBeginPrepare:
+		return "BeginPrepare"
 	case MessageTypePrepare:
 		return "Prepare"
+	case MessageTypeCommitPrepared:
+		return "CommitPrepared"
+	case MessageTypeRollbackPrepared:
+		return "RollbackPrepared"
+	case MessageTypeStreamPrepare:
+		return "StreamPrepare"
 	default:
 		return "Unknown"
 	}
@@ -441,6 +449,7 @@ func (m *TupleData) Decode(src []byte) (int, error) {
 // InsertMessage is a insert message
 type InsertMessage struct {
 	baseMessage
+	// RelationID is the ID of the relation corresponding to the ID in the relation message.
 	RelationID uint32
 	Tuple      *TupleData
 }
