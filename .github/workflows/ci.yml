@@ -12,8 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ["1.19", "1.20"]
-        pg-version: [13, 14, 15]
+        # minimum and latest version of Go
+        go-version: ["1.21", "1.24"]
+        # all supported versions of Postgres
+        pg-version: [13, 14, 15, 16, 17]
       fail-fast: false
     env:
       PGLOGREPL_TEST_CONN_STRING: "postgres://pglogrepl:secret@127.0.0.1/pglogrepl?replication=database"
@@ -25,8 +27,6 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - name: Stand up Postgres ${{ matrix.pg-version }}
-        run: docker-compose up -d postgres
-        env:
-          POSTGRES_VERSION: ${{ matrix.pg-version }}
+        run: docker compose up -d postgres:${{ matrix.pg-version }}-alpine
       - name: Run tests
         run: go test -v -race ./...
