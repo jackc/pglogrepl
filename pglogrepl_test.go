@@ -362,6 +362,7 @@ func TestBaseBackup(t *testing.T) {
 		f, err := os.CreateTemp("", fmt.Sprintf("pglogrepl_test_tbs_%d.tar", i))
 		require.NoError(t, err)
 		err = pglogrepl.NextTableSpace(context.Background(), conn)
+		require.NoError(t, err)
 		var message pgproto3.BackendMessage
 	L:
 		for {
