@@ -1,7 +1,7 @@
 version: "3"
 services:
   postgres:
-    image: postgres:${POSTGRES_VERSION:-15}
+    image: postgres:${POSTGRES_VERSION:-17}
     restart: always
     command: ["-c", "wal_level=logical", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]
     environment:
