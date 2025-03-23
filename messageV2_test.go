@@ -1,9 +1,9 @@
 package pglogrepl
 
 import (
-	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
 func TestLogicalDecodingMessageV2Suite(t *testing.T) {
@@ -123,7 +123,6 @@ func (s *streamCommitSuite) Test() {
 
 	msg[0] = 'c'
 	bigEndian.PutUint32(msg[1:], xid)
-	fmt.Printf("%+v\n", msg)
 	msg[5] = flags
 	bigEndian.PutUint64(msg[6:], uint64(commitLSN))
 	bigEndian.PutUint64(msg[14:], uint64(transactionEndLSN))
