@@ -622,25 +622,19 @@ func FinishBaseBackup(ctx context.Context, conn *pgconn.PgConn) (result BaseBack
 		return result, err
 	}
 
-	// Base_Backup done, server send a command complete response from pg13
-	vmaj, err := serverMajorVersion(conn)
-	if err != nil {
-		return
-	}
+	// Base_Backup done, server sends a command complete response
 	var (
 		pack pgproto3.BackendMessage
 		ok   bool
 	)
-	if vmaj > 12 {
-		pack, err = conn.ReceiveMessage(ctx)
-		if err != nil {
-			return
-		}
-		_, ok = pack.(*pgproto3.CommandComplete)
-		if !ok {
-			err = fmt.Errorf("expect command_complete, got %T", pack)
-			return
-		}
+	pack, err = conn.ReceiveMessage(ctx)
+	if err != nil {
+		return
+	}
+	_, ok = pack.(*pgproto3.CommandComplete)
+	if !ok {
+		err = fmt.Errorf("expect command_complete, got %T", pack)
+		return
 	}
 
 	// simple query done, server send a ready for query response
