@@ -119,6 +119,15 @@ func (s *messageSuite) assertV1NotSupported(msg []byte) {
 	s.True(errors.Is(err, errMsgNotSupported))
 }
 
+func (s *messageSuite) assertV2NotSupported(msg []byte) {
+	_, err := ParseV2(msg, true)
+	s.Error(err)
+	s.True(errors.Is(err, errMsgNotSupported))
+	_, err = ParseV2(msg, false)
+	s.Error(err)
+	s.True(errors.Is(err, errMsgNotSupported))
+}
+
 func (s *messageSuite) createRelationTestData() ([]byte, *RelationMessage) {
 	relationID := uint32(rand.Int31())
 	namespace := "public"
