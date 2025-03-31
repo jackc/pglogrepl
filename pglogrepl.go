@@ -247,8 +247,8 @@ func ParseCreateReplicationSlot(mrr *pgconn.MultiResultReader) (CreateReplicatio
 	}
 
 	row := result.Rows[0]
-	if len(row) < 4 {
-		return crsr, fmt.Errorf("expected at least 4 result columns, got %d", len(row))
+	if len(row) != 4 {
+		return crsr, fmt.Errorf("expected 4 result columns, got %d", len(row))
 	}
 
 	crsr.SlotName = string(row[0])
