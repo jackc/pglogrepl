@@ -139,8 +139,8 @@ func ParseIdentifySystem(mrr *pgconn.MultiResultReader) (IdentifySystemResult, e
 	}
 
 	row := result.Rows[0]
-	if len(row) != 4 {
-		return isr, fmt.Errorf("expected 4 result columns, got %d", len(row))
+	if len(row) < 4 {
+		return isr, fmt.Errorf("expected at least 4 result columns, got %d", len(row))
 	}
 
 	isr.SystemID = string(row[0])
