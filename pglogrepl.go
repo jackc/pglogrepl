@@ -748,8 +748,6 @@ type CopyDoneResult struct {
 // SendStandbyCopyDone sends a StandbyCopyDone to the PostgreSQL server
 // to confirm ending the copy-both mode.
 func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneResult, err error) {
-	cdr = &CopyDoneResult{}
-
 	// I am suspicious that this is wildly wrong, but I'm pretty sure the previous
 	// code was wildly wrong too -- wttw <steve@blighty.com>
 	conn.Frontend().Send(&pgproto3.CopyDone{})
@@ -778,6 +776,7 @@ func SendStandbyCopyDone(_ context.Context, conn *pgconn.PgConn) (cdr *CopyDoneR
 				if lerr == nil {
 					lsn, lerr := ParseLSN(string(m.Values[1]))
 					if lerr == nil {
+						cdr = &CopyDoneResult{}
 						cdr.Timeline = int32(timeline)
 						cdr.LSN = lsn
 					}
