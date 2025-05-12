@@ -7,7 +7,6 @@ import (
 
 // MessageDecoderV2 decodes message from V2 protocol into struct.
 type MessageDecoderV2 interface {
-	MessageDecoder
 	DecodeV2(src []byte, inStream bool) error
 }
 
