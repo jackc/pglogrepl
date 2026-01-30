@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pglogrepl"
+	"github.com/atvenu/pglogrepl"
 	"github.com/atvenu/pgx/pgconn"
 	"github.com/atvenu/pgx/pgproto3"
 	"github.com/atvenu/pgx/pgtype"
