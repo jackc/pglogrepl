@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pglogrepl"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/atvenu/pgx/pgconn"
+	"github.com/atvenu/pgx/pgproto3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

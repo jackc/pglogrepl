@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pglogrepl"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgproto3"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/atvenu/pgx/pgconn"
+	"github.com/atvenu/pgx/pgproto3"
+	"github.com/atvenu/pgx/pgtype"
 )
 
 func main() {
