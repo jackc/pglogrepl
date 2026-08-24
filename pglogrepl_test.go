@@ -391,6 +391,7 @@ func TestBaseBackup(t *testing.T) {
 	require.Equal(t, startRes.TimelineID, stopRes.TimelineID)
 	require.Equal(t, len(stopRes.Tablespaces), 0)
 	require.Less(t, uint64(startRes.LSN), uint64(stopRes.LSN))
+	require.Greater(t, startRes.PgDataSize, 0)
 	_, err = pglogrepl.StartBaseBackup(context.Background(), conn, options)
 	require.NoError(t, err)
 }

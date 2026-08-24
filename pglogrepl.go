@@ -476,6 +476,7 @@ type BaseBackupResult struct {
 	LSN         LSN
 	TimelineID  int32
 	Tablespaces []BaseBackupTablespace
+	PgDataSize  int
 }
 
 func serverMajorVersion(conn *pgconn.PgConn) (int, error) {
@@ -506,7 +507,7 @@ func StartBaseBackup(ctx context.Context, conn *pgconn.PgConn, options BaseBacku
 	if err != nil {
 		return result, err
 	}
-	result.Tablespaces, err = getTableSpaceInfo(ctx, conn)
+	result.Tablespaces, result.PgDataSize, err = getTableSpaceInfo(ctx, conn)
 	return result, err
 }
 
@@ -557,41 +558,50 @@ func getBaseBackupInfo(ctx context.Context, conn *pgconn.PgConn) (start LSN, tim
 }
 
 // getBaseBackupInfo returns the start or end position of the backup as returned by Postgres
-func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBackupTablespace, err error) {
+func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBackupTablespace, pgdataSize int, err error) {
 	for {
 		msg, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			return tbss, fmt.Errorf("failed to receive message: %w", err)
+			return tbss, 0, fmt.Errorf("failed to receive message: %w", err)
 		}
 		switch msg := msg.(type) {
 		case *pgproto3.RowDescription:
 			if len(msg.Fields) != 3 {
-				return tbss, fmt.Errorf("expected 3 column headers, received: %d", len(msg.Fields))
+				return tbss, 0, fmt.Errorf("expected 3 column headers, received: %d", len(msg.Fields))
 			}
 			colName := string(msg.Fields[0].Name)
 			if colName != "spcoid" {
-				return tbss, fmt.Errorf("unexpected col name for spcoid col: %s", colName)
+				return tbss, 0, fmt.Errorf("unexpected col name for spcoid col: %s", colName)
 			}
 			colName = string(msg.Fields[1].Name)
 			if colName != "spclocation" {
-				return tbss, fmt.Errorf("unexpected col name for spclocation col: %s", colName)
+				return tbss, 0, fmt.Errorf("unexpected col name for spclocation col: %s", colName)
 			}
 			colName = string(msg.Fields[2].Name)
 			if colName != "size" {
-				return tbss, fmt.Errorf("unexpected col name for size col: %s", colName)
+				return tbss, 0, fmt.Errorf("unexpected col name for size col: %s", colName)
 			}
 		case *pgproto3.DataRow:
 			if len(msg.Values) != 3 {
-				return tbss, fmt.Errorf("expected 3 columns, received: %d", len(msg.Values))
+				return tbss, 0, fmt.Errorf("expected 3 columns, received: %d", len(msg.Values))
 			}
 			if msg.Values[0] == nil {
+				// this is the pgdata row, when progress is requested it has its size
+				if msg.Values[2] != nil {
+					colData := string(msg.Values[2])
+					size, err := strconv.Atoi(colData)
+					if err != nil {
+						return tbss, 0, fmt.Errorf("cannot convert size to int: %s", colData)
+					}
+					pgdataSize = size
+				}
 				continue
 			}
 			tbs := BaseBackupTablespace{}
 			colData := string(msg.Values[0])
 			OID, err := strconv.Atoi(colData)
 			if err != nil {
-				return tbss, fmt.Errorf("cannot convert spcoid to int: %s", colData)
+				return tbss, 0, fmt.Errorf("cannot convert spcoid to int: %s", colData)
 			}
 			tbs.OID = int32(OID)
 			tbs.Location = string(msg.Values[1])
@@ -599,15 +609,15 @@ func getTableSpaceInfo(ctx context.Context, conn *pgconn.PgConn) (tbss []BaseBac
 				colData := string(msg.Values[2])
 				size, err := strconv.Atoi(colData)
 				if err != nil {
-					return tbss, fmt.Errorf("cannot convert size to int: %s", colData)
+					return tbss, 0, fmt.Errorf("cannot convert size to int: %s", colData)
 				}
 				tbs.Size = int8(size)
 			}
 			tbss = append(tbss, tbs)
 		case *pgproto3.CommandComplete:
-			return tbss, nil
+			return tbss, pgdataSize, nil
 		default:
-			return tbss, fmt.Errorf("unexpected response type: %T", msg)
+			return tbss, 0, fmt.Errorf("unexpected response type: %T", msg)
 		}
 	}
 }
