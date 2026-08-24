@@ -329,7 +329,7 @@ drop table mytable;
 
 	copyDoneResult, err := pglogrepl.SendStandbyCopyDone(ctx, conn)
 	require.NoError(t, err)
-	assert.Nil(t, copyDoneResult)
+	assert.Equal(t, copyDoneResult, pglogrepl.CopyDoneResult{})
 }
 
 func TestBaseBackup(t *testing.T) {
