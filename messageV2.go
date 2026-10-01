@@ -237,8 +237,8 @@ func (m *InsertMessageV2) DecodeV2(src []byte, inStream bool) (err error) {
 		return m.InsertMessage.Decode(src)
 	}
 
-	if len(src) < 12 {
-		return m.lengthError("InsertMessageV2", 12, len(src))
+	if len(src) < 11 {
+		return m.lengthError("InsertMessageV2", 11, len(src))
 	}
 
 	src = readXidAndAdvance(src, &m.InStreamMessageV2WithXid, inStream)
