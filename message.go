@@ -438,8 +438,8 @@ type InsertMessage struct {
 
 // Decode decodes to message from src.
 func (m *InsertMessage) Decode(src []byte) error {
-	if len(src) < 8 {
-		return m.lengthError("InsertMessage", 8, len(src))
+	if len(src) < 7 {
+		return m.lengthError("InsertMessage", 7, len(src))
 	}
 
 	var low, used int

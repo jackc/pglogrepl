@@ -285,6 +285,24 @@ func (s *messageSuite) createInsertTestData() ([]byte, *InsertMessage) {
 	return msg, expected
 }
 
+func (s *messageSuite) createInsertTestDataNoColumns() ([]byte, *InsertMessage) {
+	relationID := s.newRelationID()
+
+	msg := make([]byte, 1+4+1+2)
+	msg[0] = 'I'
+	bigEndian.PutUint32(msg[1:], relationID)
+	msg[5] = 'N'
+	bigEndian.PutUint16(msg[6:], 0)
+
+	expected := &InsertMessage{
+		RelationID: relationID,
+		Tuple:      &TupleData{},
+	}
+	expected.msgType = 'I'
+
+	return msg, expected
+}
+
 func (s *messageSuite) createUpdateTestDataTypeK() ([]byte, *UpdateMessage) {
 	relationID := s.newRelationID()
 
@@ -727,6 +745,17 @@ type insertMessageSuite struct {
 func (s *insertMessageSuite) Test() {
 
 	msg, expected := s.createInsertTestData()
+
+	m, err := Parse(msg)
+	s.NoError(err)
+	insertMsg, ok := m.(*InsertMessage)
+	s.True(ok)
+
+	s.Equal(expected, insertMsg)
+}
+
+func (s *insertMessageSuite) TestNoColumns() {
+	msg, expected := s.createInsertTestDataNoColumns()
 
 	m, err := Parse(msg)
 	s.NoError(err)

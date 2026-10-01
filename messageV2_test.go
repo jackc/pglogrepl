@@ -271,6 +271,29 @@ func (s *insertMessageV2Suite) TestNoStream() {
 	s.Equal(expected, &insertMsg.InsertMessage)
 }
 
+func (s *insertMessageV2Suite) TestNoColumns() {
+	msg, expected := s.createInsertTestDataNoColumns()
+	msgV2, xid := s.insertXid(msg)
+
+	m, err := ParseV2(msgV2, true)
+	s.NoError(err)
+	insertMsg, ok := m.(*InsertMessageV2)
+	s.True(ok)
+	s.Equal(xid, insertMsg.Xid)
+	s.Equal(expected, &insertMsg.InsertMessage)
+}
+
+func (s *insertMessageV2Suite) TestNoColumnsNoStream() {
+	msg, expected := s.createInsertTestDataNoColumns()
+
+	m, err := ParseV2(msg, false)
+	s.NoError(err)
+	insertMsg, ok := m.(*InsertMessageV2)
+	s.True(ok)
+	s.Equal(uint32(0), insertMsg.Xid)
+	s.Equal(expected, &insertMsg.InsertMessage)
+}
+
 func TestUpdateMessageV2Suite(t *testing.T) {
 	suite.Run(t, new(updateMessageV2Suite))
 }
