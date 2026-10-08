@@ -46,6 +46,16 @@ func (t MessageType) String() string {
 		return "StreamCommit"
 	case MessageTypeStreamAbort:
 		return "StreamAbort"
+	case MessageTypeBeginPrepare:
+		return "BeginPrepare"
+	case MessageTypePrepare:
+		return "Prepare"
+	case MessageTypeCommitPrepared:
+		return "CommitPrepared"
+	case MessageTypeRollbackPrepared:
+		return "RollbackPrepared"
+	case MessageTypeStreamPrepare:
+		return "StreamPrepare"
 	default:
 		return "Unknown"
 	}
@@ -53,20 +63,29 @@ func (t MessageType) String() string {
 
 // List of types of logical replication messages.
 const (
-	MessageTypeBegin        MessageType = 'B'
-	MessageTypeMessage      MessageType = 'M'
-	MessageTypeCommit       MessageType = 'C'
-	MessageTypeOrigin       MessageType = 'O'
-	MessageTypeRelation     MessageType = 'R'
-	MessageTypeType         MessageType = 'Y'
-	MessageTypeInsert       MessageType = 'I'
-	MessageTypeUpdate       MessageType = 'U'
-	MessageTypeDelete       MessageType = 'D'
-	MessageTypeTruncate     MessageType = 'T'
+	MessageTypeBegin    MessageType = 'B'
+	MessageTypeMessage  MessageType = 'M'
+	MessageTypeCommit   MessageType = 'C'
+	MessageTypeOrigin   MessageType = 'O'
+	MessageTypeRelation MessageType = 'R'
+	MessageTypeType     MessageType = 'Y'
+	MessageTypeInsert   MessageType = 'I'
+	MessageTypeUpdate   MessageType = 'U'
+	MessageTypeDelete   MessageType = 'D'
+	MessageTypeTruncate MessageType = 'T'
+
+	// introduced in protocol version 2
 	MessageTypeStreamStart  MessageType = 'S'
 	MessageTypeStreamStop   MessageType = 'E'
 	MessageTypeStreamCommit MessageType = 'c'
 	MessageTypeStreamAbort  MessageType = 'A'
+
+	// introduced in protocol version 3
+	MessageTypeBeginPrepare     MessageType = 'b'
+	MessageTypePrepare          MessageType = 'P'
+	MessageTypeCommitPrepared   MessageType = 'K'
+	MessageTypeRollbackPrepared MessageType = 'r'
+	MessageTypeStreamPrepare    MessageType = 'p'
 )
 
 // Message is a message received from server.
@@ -182,7 +201,6 @@ func (m *BeginMessage) Decode(src []byte) error {
 	m.Xid = binary.BigEndian.Uint32(src[low:])
 
 	m.SetType(MessageTypeBegin)
-
 	return nil
 }
 
