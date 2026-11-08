@@ -681,3 +681,35 @@ func requireSummarizeWalOn(ctx context.Context, t *testing.T, conn *pgconn.PgCon
 		t.Skipf("summarize_wal=%q; start postgres with -c summarize_wal=on (required for incremental base backups)", val)
 	}
 }
+
+func TestParseLSN(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    pglogrepl.LSN
+		wantErr bool
+	}{
+		{name: "zero", input: "0/0", want: 0},
+		{name: "typical value", input: "16/B374D848", want: pglogrepl.LSN(97500059720)},
+		{name: "lowercase hex", input: "16/b374d848", want: pglogrepl.LSN(97500059720)},
+		{name: "upper half only", input: "1/0", want: pglogrepl.LSN(1 << 32)},
+		{name: "max value", input: "FFFFFFFF/FFFFFFFF", want: pglogrepl.LSN(^uint64(0))},
+		{name: "empty string", input: "", wantErr: true},
+		{name: "no slash", input: "16", wantErr: true},
+		{name: "missing lower half", input: "16/", wantErr: true},
+		{name: "missing upper half", input: "/16", wantErr: true},
+		{name: "not hex", input: "G/1", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pglogrepl.ParseLSN(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
